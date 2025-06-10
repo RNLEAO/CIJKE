@@ -1,0 +1,66 @@
+C251 COMPILER V5.60.0,  PID_ELE                                                            05/01/25  13:23:50  PAGE 1   
+
+
+C251 COMPILER V5.60.0, COMPILATION OF MODULE PID_ELE
+OBJECT MODULE PLACED IN .\Out_File\PID_ELE.obj
+COMPILER INVOKED BY: C:\Keil_v5\C251\BIN\C251.EXE PID_ELE.c LARGE WARNINGLEVEL(3) OPTIMIZE(0,SPEED) BROWSE INCDIR(..\..\
+                    -Libraries\libraries;..\..\Libraries\seekfree_libraries;..\..\Libraries\seekfree_peripheral;..\CODE;..\USER\inc;..\USER\s
+                    -rc;..\..\Libraries\seekfree_components;..\USER\inc;..\USER\src;..\MDK) DEBUG PRINT(.\Out_File\PID_ELE.lst) TABS(2) OBJEC
+                    -T(.\Out_File\PID_ELE.obj) 
+
+stmt  level    source
+
+    1          #include "headfile.h"
+    2          
+    3          
+    4          //转向增量式PID
+    5          float turn_PstPID(float turn_error,PID_TypDef* sptr)
+    6          {
+    7   1        float Pwm;
+    8   1        sptr->Bias = turn_error;                                     // 计算当前误差
+    9   1        
+   10   1        Pwm = sptr->Kp * (sptr->Bias-sptr->Last_Bias)+sptr->Ki * sptr->Bias +sptr->Kd * sptr->Bias *fabs(sptr->B
+             -ias)+sptr->Kd2*sptr->Bias *sptr->Bias *sptr->Bias ;  //P I D
+   11   1        
+   12   1      //  if(fabs(sptr->Bias) <= 1.5)
+   13   1      //  Pwm = sptr->Kp * (sptr->Bias-sptr->Last_Bias)+sptr->Ki * sptr->Bias +sptr->Kd * sptr->Bias *fabs(sptr
+             -->Bias) * 0.7 ;  //P I D
+   14   1      //  else
+   15   1      //  Pwm = sptr->Kp * (sptr->Bias-sptr->Last_Bias)+sptr->Ki * sptr->Bias +sptr->Kd * sptr->Bias *fabs(sptr-
+             ->Bias) * 1.1;  
+   16   1        
+   17   1      //  p=((sptr->Bias-sptr->Last_Bias));
+   18   1        sptr->Pre_Bias=sptr->Last_Bias;                          // 存储误差，用于下次计算
+   19   1        sptr->Last_Bias=sptr->Bias;   
+   20   1        
+   21   1         
+   22   1        return Pwm;                                    // 返回增量值
+   23   1        
+   24   1      }
+   25          
+   26          
+   27          
+
+
+Module Information          Static   Overlayable
+------------------------------------------------
+  code size            =       460     ------
+  ecode size           =    ------     ------
+  data size            =    ------     ------
+  idata size           =    ------     ------
+  pdata size           =    ------     ------
+  xdata size           =        12     ------
+  xdata-const size     =    ------     ------
+  edata size           =    ------     ------
+  bit size             =    ------     ------
+  ebit size            =    ------     ------
+  bitaddressable size  =    ------     ------
+  ebitaddressable size =    ------     ------
+  far data size        =    ------     ------
+  huge data size       =    ------     ------
+  const size           =    ------     ------
+  hconst size          =    ------     ------
+End of Module Information.
+
+
+C251 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

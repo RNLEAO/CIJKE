@@ -1,0 +1,878 @@
+
+#include "headfile.h"
+
+
+
+void UART1_Isr() interrupt 4
+{
+    uint8 res;
+	static uint8 dwon_count;
+    if(UART1_GET_TX_FLAG)
+    {
+        UART1_CLEAR_TX_FLAG;
+        busy[1] = 0;
+    }
+    if(UART1_GET_RX_FLAG)
+    {
+        UART1_CLEAR_RX_FLAG;
+        res = SBUF;
+        //???????????
+        if(res == 0x7F)
+        {
+            if(dwon_count++ > 20)
+                IAP_CONTR = 0x60;
+        }
+        else
+        {
+            dwon_count = 0;
+        }
+    }
+}
+
+//UART2?ж?
+void UART2_Isr() interrupt 8
+{
+    if(UART2_GET_TX_FLAG)
+	{
+        UART2_CLEAR_TX_FLAG;
+		busy[2] = 0;
+	}
+    if(UART2_GET_RX_FLAG)
+	{
+        UART2_CLEAR_RX_FLAG;
+		//???????????????S2BUF
+
+	}
+}
+
+
+//UART3?ж?
+void UART3_Isr() interrupt 17
+{
+    if(UART3_GET_TX_FLAG)
+	{
+        UART3_CLEAR_TX_FLAG;
+		busy[3] = 0;
+	}
+    if(UART3_GET_RX_FLAG)
+	{
+        UART3_CLEAR_RX_FLAG;
+		//???????????????S3BUF
+
+	}
+}
+
+
+//UART4?ж?
+void UART4_Isr() interrupt 18
+{
+    if(UART4_GET_TX_FLAG){
+			
+        UART4_CLEAR_TX_FLAG;
+				busy[4] = 0;
+	  }
+	
+    if(UART4_GET_RX_FLAG){
+			
+        UART4_CLEAR_RX_FLAG;
+				 
+			//??????????????????????1????????
+			RxLine++;                            
+			//????ν????????????浽????????
+			DataBuff[RxLine-1]=S4BUF;                 
+			
+			if(S4BUF==0x21) // //??????????λ
+			{
+			USART_PID_Adjust();//???????????????????
+			memset(DataBuff,0,sizeof(DataBuff));  //????????????
+			RxLine=0;  //???????????
+			}
+			
+		
+		//???????????????S4BUF;
+		if(wireless_module_uart_handler != NULL){
+			// ?ú???????????
+			// ?????????????????????ú???????
+			wireless_module_uart_handler(S4BUF);
+			
+			
+		}
+	}
+}
+
+#define LED P52
+void INT0_Isr() interrupt 0
+{
+	LED = 0;	//????LED
+}
+void INT1_Isr() interrupt 2
+{
+
+}
+void INT2_Isr() interrupt 10
+{
+	INT2_CLEAR_FLAG;  //????ж????
+}
+void INT3_Isr() interrupt 11
+{
+	INT3_CLEAR_FLAG;  //????ж????
+}
+
+void INT4_Isr() interrupt 16
+{
+	INT4_CLEAR_FLAG;  //????ж????
+}
+
+void TM0_Isr() interrupt 1
+{
+
+}
+
+
+
+
+
+float error=0;
+
+float Roll_x=0;
+//临时变量
+float err_t=0.000036035;
+#define PWM_DUTY_MIN -8000 
+//速度环
+float current_l_pwm_inc = 0;
+float current_r_pwm_inc = 0;
+//方向环
+float current_l_pwm_duty_turn = 0;
+float current_r_pwm_duty_turn = 0;
+//角度环
+float current_l_pwm_duty_ang_turn = 0;
+float current_r_pwm_duty_ang_turn = 0;
+//最终输出pwm
+float current_l_pwm_duty = 0;
+float current_r_pwm_duty = 0;
+
+uint16 a,b;
+float adcdata_aver[5]={0};
+
+
+float mot_inc=0;
+float mot_inc_element=0;
+float gyro_roll_cross=0;
+
+
+//圆环角度积分
+float gyro_roll_sign_rign=0;
+float gyro_roll_sign_cross=0;
+//充电编码器积分开关
+char encoder_charge_sign=0;
+float encoder_charge_element=0;
+//十字编码器积分开关
+char encoder_cross_sign=0;
+float encoder_cross_element=0;
+//加速编码器积分开关
+char encoder_speedup_sign=0;
+float encoder_speedup_element=0;
+//圆环退出
+float ring_out_element=0;
+char ring_out_sign=0;
+
+//出环时间开关
+char time_speedup_sign=0;
+float time_speedup_element=0;
+
+
+/*****************堵转检测*****************//*****************堵转检测*****************//*****************堵转检测*****************/
+/* 在全局变量区添加 */
+#define STALL_SPEED_THRESHOLD    5      /* 速度阈值（编码器计数值/周期） */
+#define STALL_PWM_THRESHOLD      200     /* PWM占空比阈值 */
+#define STALL_DURATION_MS        2100     /* 持续判定时间（毫秒） */
+#define STALL_CHECK_CYCLES       (STALL_DURATION_MS / 10) /* 10ms中断周期 */
+
+/*****************向量和公式左右差异补偿*****************//*****************向量和公式左右差异补偿*****************//*****************向量和公式左右差异补偿*****************/
+//串级
+#if 1
+float dir_loop_limit=120; 
+float dir_enlarge=15.5;  
+#endif
+
+
+
+float err_H=1;
+float err_X=1;
+float err_HM=1;
+float err_d=1;
+float err_M=1;
+
+
+/* 结构体声明 */
+typedef struct {
+    unsigned int counter;
+    unsigned char detected;
+} StallDetection;
+
+
+/* 全局变量声明 */
+StallDetection left_stall = {0, 0};
+StallDetection right_stall = {0, 0};
+/*****************直角弯处理*****************//*****************直角弯处理*****************//*****************直角弯处理*****************/
+
+float mid_dynamic_weight =0;
+float base_error =0;
+
+float weight_x =0;
+float weight_y =0;
+
+float elesub =0;
+float eleadd =0;
+/*****************短时间大角度判断*****************//*****************短时间大角度判断*****************//*****************直角弯处理*****************/
+
+
+void TM1_Isr() interrupt 3
+{
+	
+			static int timer_call_count = 0; 
+			static float l_speed_abs, r_speed_abs;
+			static float l_pwm_abs, r_pwm_abs;
+			static unsigned int stall_event_counter = 0;  /* 堵转事件计数器 */
+			static bit time_speedup_brake_started = 0;  // 是否开始刹车流程
+			static unsigned int run_mode2_counter = 0;
+			static bit run_mode2_timing_started = 0;
+
+		
+			/*********************数据采集*********************//*********************数据采集*********************//*********************数据采集*********************/	
+			imu660ra_get_gyro();
+			gyro_data[0] = imu660ra_gyro_transition(imu660ra_gyro_x) ;
+
+			//encoder
+			l_encoder = (float)ctimer_count_read(MOTOR1_ENCODER);  
+			r_encoder = (float)ctimer_count_read(MOTOR2_ENCODER);  
+
+			//电感
+			L  	=	read_adc_average(ADC_P06,5,ADC_12BIT);
+			LM	=	read_adc_average(ADC_P00,5,ADC_12BIT);
+			RM	=	read_adc_average(ADC_P01,5,ADC_12BIT);
+			R		=	read_adc_average(ADC_P05,5,ADC_12BIT);
+			MID	=	read_adc_average(ADC_P10,5,ADC_12BIT);
+			R_raw=R;
+			L_raw=L;
+			
+			//限幅
+			L  	=	limit_float(L,0,2300);
+			LM 	=	limit_float(LM,0,1700);
+			RM 	=	limit_float(RM,0,1700);
+			R  	=	limit_float(R,0,2300);
+			MID	=	limit_float(MID,0,2480);
+			//有个小bug，输入的 value 小于 min，将是一个负数
+			L 	= normalize_float(L,0,2300);
+			LM	= normalize_float(LM,0,1700);
+			RM	= normalize_float(RM,0,1700);
+			R 	= normalize_float(R,0,2300);
+			MID =	normalize_float(MID,0,2480);
+	
+	
+			//Data processing
+			//encoder
+			ctimer_count_clean(MOTOR1_ENCODER);  
+			ctimer_count_clean(MOTOR2_ENCODER); 
+
+			l_speed_now=l_speed_now*0.2+l_encoder*0.8;
+			r_speed_now=r_speed_now*0.2+r_encoder*0.8;
+
+		/*********************电机方向*********************//*********************电机方向*********************//*********************电机方向*********************/	
+
+			//Motor direction
+			if(MOTOR1_DIR != 0) 													
+			{
+				l_speed_now = l_speed_now * (-1); 
+			}
+
+			if(MOTOR2_DIR != 1) 																
+			{
+				r_speed_now = r_speed_now * (-1);  
+			}
+
+		/*********************陀螺仪积分*********************//*********************陀螺仪积分*********************//*********************陀螺仪积分*********************/	
+
+			update_gyro_angle_accumulator(&gyro_roll,gyro_roll_sign_rign);
+			update_gyro_angle_accumulator(&gyro_roll_cross,gyro_roll_sign_cross);
+	
+		/*********************路程积分*********************//*********************路程积分*********************//*********************路程积分*********************/	
+
+
+
+
+
+			//Encoder integration
+			if (timer_call_count < 30) {
+			timer_call_count++;
+				l_speed_now=0;
+				r_speed_now=0;
+				mot_inc = 0.0f;
+			} 
+				else if(pwm_state==1){					
+				update_encoder_speedup_value(&mot_inc,pwm_state);	
+					
+			}
+				//圆环积分			
+			update_encoder_speedup_value(&mot_inc_element,encoder_sign);	
+			
+				//十字积分
+			update_encoder_speedup_value(&encoder_cross_element,encoder_cross_sign);	
+
+			//充电积分
+			if(encoder_charge_sign==1){	
+			
+			encoder_charge_element+=(fabs(l_speed_now)+fabs(r_speed_now))*0.5f*0.00003895;}
+			
+			//加速积分
+			update_encoder_speedup_value(&encoder_speedup_element,encoder_speedup_sign);	
+
+			
+		/*********************切换*********************//*********************切换*********************//*********************切换*********************/	
+
+			
+
+			
+			if(time_speedup_sign == 1)
+				{
+					time_speedup_element++;
+					
+					// 到达触发点，执行一次刹车指令
+					if((time_speedup_element >= 75) && (time_speedup_brake_started == 0))
+					{
+							change_speed_Target_base(220);         // 改为目标速度220，不是0
+							time_speedup_brake_started = 1;        // 标志已开始刹车过程
+
+					}
+
+					// 等待速度真实下降后，才切换模式
+					if(time_speedup_brake_started)
+					{
+							float l_speed_abs = fabs(l_speed_now);
+							float r_speed_abs = fabs(r_speed_now);
+
+							if(l_speed_abs <= 220 && r_speed_abs <= 220)
+							{
+									run_mode = 2;                      // 模式切换
+									time_speedup_sign = 0;             // 清除标志
+									time_speedup_element = 0;
+									time_speedup_brake_started = 0;    // 允许下次再触发
+							}
+					}
+				}
+			
+			
+
+			//修改速度
+			if(run_mode==2) {
+				change_speed_Target(250);		
+				if(run_mode2_timing_started == 0)
+				{
+						run_mode2_timing_started = 1;
+						run_mode2_counter = 0;
+				}										
+			}
+			if(run_mode2_timing_started)
+			{
+					run_mode2_counter++;
+
+					if(run_mode2_counter >= 500)  // 假设 TM1_ISR 1ms 一次，这里是2秒
+					{
+							run_mode = 1;
+							change_speed_Target_base(240);  // 切换状态时设置目标速度
+							
+							// 清空所有计数和标志
+							run_mode2_timing_started = 0;
+							run_mode2_counter = 0;
+							time_speedup_sign = 0;  // 可选，看是否需要重置
+					}
+			}
+			
+			if(P36==0){
+			run_mode=1;
+			change_speed_Target_base(240);	
+			time_speedup_sign=0;
+			}
+			
+			
+	
+			 buzzer_control_with_enable(run_mode,2,1);
+
+
+		/****************error***************//****************error***************//****************error***************/
+		
+		if(run_mode==1){
+		
+		error       =	((err_H*(L-R)+err_X*(2*LM-2*RM))/(err_HM*(L+R)+err_d*fabs(LM-RM)+err_M*MID));
+		
+		}
+		else if(run_mode==2){
+		
+		error  			=	(((L-R)+(LM-RM))/((L+R)+fabs(LM-RM)));
+		
+		}
+		
+		
+		
+			/*********************参数切换*********************//*********************参数切换*********************//*********************参数切换*********************/	
+
+		change_para();
+		
+
+		
+		/****************特殊处理***************//****************特殊处理***************//****************特殊处理***************/
+
+
+//		run_mode=check_hall_sensor();
+		/*********************标志位*********************//*********************标志位*********************//*********************标志位*********************/	
+
+//		buzzer_control_with_enable(current_l_pwm_duty_turn,dir_loop_limit*dir_enlarge,pwm_state);
+//		buzzer_control_with_enable(cir_flag,3,1);
+//	  buzzer_control_with_enable(l_speed_now,310,1);
+		
+		/*********************方向环*********************//*********************方向环*********************//*********************方向环*********************/	
+		
+//		cross_proc();
+		Turn_PID.err=error;
+		
+		//状态机退出
+		if(cir_flag==2){
+			ring_out_element++;
+			if(ring_out_element >300){
+				if(fabs(gyro_roll) < 240.0f)
+				{
+					temp_flag=0;
+					cir_flag=0;
+					yuansu_flag=1; 
+					
+					gyro_roll_sign_rign=0;
+					encoder_sign=0;
+					mot_inc_element=0;
+					gyro_roll=0;
+				}
+			}
+			
+		}
+		else{
+		ring_out_element=0;
+		}
+
+		/*********************圆环*********************/
+		
+		
+		
+		if(cir_flag==6)	{temp_flag++;}
+		Circle_detect();
+		cricle_cl();
+		
+		 
+
+		
+		
+		
+		
+		
+		/*********************圆环*********************/
+		
+		
+		//1 串级
+		//2 并级
+//		run_mode=set_control_mode(run_mode);
+		//方向环，双pd
+		if(run_mode==1){
+		Turn_PID.out=Turn_PID.kp*Turn_PID.err+
+								 Turn_PID.ki*Turn_PID.err*fabs(Turn_PID.err)*2+
+								 Turn_PID.kd*(Turn_PID.err-Turn_PID.err_last)+
+								 Turn_PID.kp1*gyro_data[0];
+		Turn_PID.last=Turn_PID.out;
+		//限幅
+		Turn_PID.out=limit_function(Turn_PID.out,-dir_loop_limit,dir_loop_limit);
+		Turn_PID.err_last=Turn_PID.err;
+		
+		}
+		
+		
+		else if(run_mode==2){
+		Turn_PID.out=Turn_PID.kp*Turn_PID.err+
+								 Turn_PID.ki*Turn_PID.err*fabs(Turn_PID.err)+
+								 Turn_PID.kd*(Turn_PID.err-Turn_PID.err_last)+
+								 Turn_PID.kp1*gyro_data[0];
+		Turn_PID.last=Turn_PID.out;
+		
+		Turn_PID.out=limit_function(Turn_PID.out,-dir_loop_limit,dir_loop_limit);
+		Turn_PID.err_last=Turn_PID.err;
+
+
+		current_l_pwm_duty_turn=Turn_PID.out*dir_enlarge;
+		current_r_pwm_duty_turn=Turn_PID.out*dir_enlarge;//甩尾可以尝试缩小这个
+
+		}
+		
+		
+
+		
+		/*********************标志位*********************//*********************标志位*********************//*********************标志位*********************/	
+	
+//		buzzer_control_with_enable(Turn_PID.out,50,pwm_state);		
+//		buzzer_control_with_enable(encoder_charge_sign,2,1);
+
+
+			/*********************角度环*********************//*********************角度环*********************//*********************角度环*********************/
+			target_angle=0;			
+			current_angle+=gyro_data[0] * 0.005;
+			ang_pid.err=target_angle-current_angle;
+			
+			ang_pid.out=ang_pid.kp*ang_pid.err+
+									 ang_pid.ki*ang_pid.err*fabs(ang_pid.err)*2+
+									 ang_pid.kd*(ang_pid.err-ang_pid.err_last)+
+									 ang_pid.kp1*gyro_data[0];
+			ang_pid.last=ang_pid.out;
+			//限幅
+			ang_pid.err_last=ang_pid.err;
+
+
+			current_l_pwm_duty_ang_turn=ang_pid.out;
+			current_r_pwm_duty_ang_turn=ang_pid.out;
+
+			
+
+		 current_l_pwm_duty_ang_turn=limit_function(current_l_pwm_duty_ang_turn,-350,350);
+		 current_r_pwm_duty_ang_turn=limit_function(current_r_pwm_duty_ang_turn,-350,350);
+
+		
+		
+	/*********************速度环*********************//*********************速度环*********************//*********************速度环*********************/	
+		
+		/*********************////根据中电感计算速度////*********************/
+		#if 0
+
+		L_pid.Target=calculate_dynamic_target_speed_quadratic(MID);
+		R_pid.Target=calculate_dynamic_target_speed_quadratic(MID);
+		
+		//计算速度环PID
+		current_l_pwm_inc=current_l_pwm_inc+IncPID(l_speed_now,L_pid.Target,&L_pid);
+		current_r_pwm_inc=current_r_pwm_inc+IncPID(r_speed_now,R_pid.Target,&R_pid);
+
+
+		//限幅
+		if(L_pid.Target<=300){
+		 current_l_pwm_inc=limit_function(current_l_pwm_inc,-700,700);
+		 current_r_pwm_inc=limit_function(current_r_pwm_inc,-700,700);
+		}
+		else{
+		 current_l_pwm_inc=limit_function(current_l_pwm_inc,-900,900);
+		 current_r_pwm_inc=limit_function(current_r_pwm_inc,-900,900);
+		} 
+		#endif
+		
+		
+		
+		/*********************////普通速度环////*********************/
+		#if 0
+		//计算速度环PID
+		current_l_pwm_inc=current_l_pwm_inc+IncPID(l_speed_now,L_pid.Target,&L_pid);
+		current_r_pwm_inc=current_r_pwm_inc+IncPID(r_speed_now,R_pid.Target,&R_pid);
+		
+		current_l_pwm_inc=limit_function(current_l_pwm_inc,-750,750);
+		current_r_pwm_inc=limit_function(current_r_pwm_inc,-750,750);
+		#endif
+
+		
+		
+		
+		
+	 /*********************////串级速度环////*********************/
+		#if 0
+		//计算速度环PID
+		
+		L_pid.Target=L_pid.Target_base-Turn_PID.out;
+		R_pid.Target=R_pid.Target_base+Turn_PID.out;
+		
+		current_l_pwm_inc=current_l_pwm_inc+IncPID(l_speed_now,L_pid.Target,&L_pid);
+		current_r_pwm_inc=current_r_pwm_inc+IncPID(r_speed_now,R_pid.Target,&R_pid);
+		
+		current_l_pwm_inc=limit_function(current_l_pwm_inc,-1600,1600);
+		current_r_pwm_inc=limit_function(current_r_pwm_inc,-1600,1600);
+		#endif
+		
+		/*********************////判断速度环////*********************/
+		#if 1
+		//计算速度环PID
+		//1 串级
+		//2 并级
+	
+		
+		if(run_mode==1){
+
+		L_pid.Target=L_pid.Target_base-Turn_PID.out;
+		R_pid.Target=R_pid.Target_base+Turn_PID.out;
+		
+		current_l_pwm_inc=current_l_pwm_inc+IncPID(l_speed_now,L_pid.Target,&L_pid);
+		current_r_pwm_inc=current_r_pwm_inc+IncPID(r_speed_now,R_pid.Target,&R_pid);
+		
+		current_l_pwm_inc=limit_function(current_l_pwm_inc,-1600,1600);
+		current_r_pwm_inc=limit_function(current_r_pwm_inc,-1600,1600);
+		}
+		else if(run_mode==2){
+
+		current_l_pwm_inc=current_l_pwm_inc+IncPID(l_speed_now,L_pid.Target,&L_pid);
+		current_r_pwm_inc=current_r_pwm_inc+IncPID(r_speed_now,R_pid.Target,&R_pid);
+		
+		current_l_pwm_inc=limit_function(current_l_pwm_inc,-750,750);
+		current_r_pwm_inc=limit_function(current_r_pwm_inc,-750,750);
+		}
+		
+		
+		
+		
+		
+		
+		
+		
+		#endif
+		
+		
+		
+
+	/*********************最终输出pwm计算*********************//*********************最终输出pwm计算*********************//*********************最终输出pwm计算*********************/	
+		//增量式 串级
+		#if 0
+		current_l_pwm_duty=current_l_pwm_inc;
+		current_r_pwm_duty=current_r_pwm_inc;
+		#endif
+		
+		//单方向环
+		#if 0
+		current_l_pwm_duty=-current_l_pwm_duty_turn;
+		current_r_pwm_duty=+current_r_pwm_duty_turn;
+		#endif
+		
+		//并级
+		#if 0
+		current_l_pwm_duty=current_l_pwm_inc-current_l_pwm_duty_turn;
+		current_r_pwm_duty=current_r_pwm_inc+current_r_pwm_duty_turn;
+		#endif
+		
+		
+		//单角度环
+		#if 0
+		current_l_pwm_duty=+current_l_pwm_duty_ang_turn;
+		current_r_pwm_duty=-current_r_pwm_duty_ang_turn;
+		#endif
+		
+		//速度环并角度环
+		#if 0
+		current_l_pwm_duty=current_l_pwm_inc+current_l_pwm_duty_ang_turn;
+		current_r_pwm_duty=current_l_pwm_inc-current_r_pwm_duty_ang_turn;
+		#endif
+		
+		
+		//充电
+		#if 1
+			if (pwm_state_charge == 1) {
+				
+					current_l_pwm_duty=current_l_pwm_inc+current_l_pwm_duty_ang_turn;
+					current_r_pwm_duty=current_r_pwm_inc-current_r_pwm_duty_ang_turn;
+					encoder_charge_sign = 1;
+					if(encoder_charge_element >= 0.5){
+					pwm_state_charge = 0;     // 切换状态为转向中
+          encoder_charge_sign = 2;				
+					}
+			}
+			else if(pwm_state_charge==0){
+
+				//1 串级
+				//2 并级
+			
+				
+				if(run_mode==1){
+				current_l_pwm_duty=current_l_pwm_inc;
+				current_r_pwm_duty=current_r_pwm_inc;
+					
+				//限幅
+				 current_l_pwm_inc=limit_function(current_l_pwm_inc,-1600,1600);
+				 current_r_pwm_inc=limit_function(current_r_pwm_inc,-1600,1600);
+					
+				}
+				else if(run_mode==2){
+
+				//计算速度环PID
+				current_l_pwm_inc=current_l_pwm_inc+IncPID(l_speed_now,L_pid.Target,&L_pid);
+				current_r_pwm_inc=current_r_pwm_inc+IncPID(r_speed_now,R_pid.Target,&R_pid);
+				
+				current_l_pwm_duty=current_l_pwm_inc-current_l_pwm_duty_turn;
+				current_r_pwm_duty=current_r_pwm_inc+current_r_pwm_duty_turn;	
+					
+
+				//限幅
+				 current_l_pwm_inc=limit_function(current_l_pwm_inc,-650,650);
+				 current_r_pwm_inc=limit_function(current_r_pwm_inc,-650,650);
+				}
+				
+			
+			}
+
+
+		#endif
+		
+			
+		#if 0
+			
+		//1 串级
+		//2 并级
+	
+		
+		if(run_mode==1){
+		current_l_pwm_duty=current_l_pwm_inc;
+		current_r_pwm_duty=current_r_pwm_inc;
+			
+		//限幅
+		 current_l_pwm_inc=limit_function(current_l_pwm_inc,-1600,1600);
+		 current_r_pwm_inc=limit_function(current_r_pwm_inc,-1600,1600);
+			
+		}
+		else if(run_mode==2){
+
+		//计算速度环PID
+		current_l_pwm_inc=current_l_pwm_inc+IncPID(l_speed_now,L_pid.Target,&L_pid);
+		current_r_pwm_inc=current_r_pwm_inc+IncPID(r_speed_now,R_pid.Target,&R_pid);
+		
+		current_l_pwm_duty=current_l_pwm_inc-current_l_pwm_duty_turn;
+		current_r_pwm_duty=current_r_pwm_inc+current_r_pwm_duty_turn;	
+			
+
+		//限幅
+		 current_l_pwm_inc=limit_function(current_l_pwm_inc,-650,650);
+		 current_r_pwm_inc=limit_function(current_r_pwm_inc,-650,650);
+		}
+		
+
+		#endif
+			
+			
+			
+			
+			//最终输出限幅
+		current_l_pwm_duty=limit_function(current_l_pwm_duty,-1800,1800);
+		current_r_pwm_duty=limit_function(current_r_pwm_duty,-1800,1800);
+
+
+
+		
+	/*********************保护保护*********************//*********************保护保护*********************//*********************保护保护*********************/	
+		//protect
+		key_scan_cycle_pwm_state();
+		if(pwm_state==2){
+		 mot_inc=0;
+		current_l_pwm_inc=0;
+		current_r_pwm_inc=0;
+		}
+		
+		#if 0
+		if((L+R+MID<=0)&&(LM+RM<=0)) pwm_state=0;
+		#endif
+		
+		#if 0
+
+		  /* 计算绝对值 */
+			l_speed_abs = (l_speed_now > 0) ? l_speed_now : -l_speed_now;
+			r_speed_abs = (r_speed_now > 0) ? r_speed_now : -r_speed_now;
+			l_pwm_abs = (current_l_pwm_duty > 0) ? current_l_pwm_duty : -current_l_pwm_duty;
+			r_pwm_abs = (current_r_pwm_duty > 0) ? current_r_pwm_duty : -current_r_pwm_duty;
+				/* 左电机检测 */
+				if ((l_pwm_abs > STALL_PWM_THRESHOLD) && (l_speed_abs < STALL_SPEED_THRESHOLD)) 
+				{
+						if(left_stall.counter < STALL_CHECK_CYCLES){
+								left_stall.counter++;
+						}
+						else{
+								left_stall.detected = 1;
+								pwm_state = 0;  /* 完全停止 */
+						}
+				}
+				else 	{
+						left_stall.counter = 0;
+						left_stall.detected = 0;
+				}
+
+				/* 右电机检测 */
+				if ((r_pwm_abs > STALL_PWM_THRESHOLD) && (r_speed_abs < STALL_SPEED_THRESHOLD)) {
+						if(right_stall.counter < STALL_CHECK_CYCLES)	{
+								right_stall.counter++;
+						}
+						else{
+								right_stall.detected = 1;
+								pwm_state = 0;  /* 完全停止 */
+						}
+				}
+				else {
+						right_stall.counter = 0;
+						right_stall.detected = 0;
+				}
+
+				/* 严重堵转保护 */
+				if(left_stall.detected && right_stall.detected) {
+						pwm_state = 0;  /* 完全停止 */
+						stall_event_counter++;
+				}
+			#endif
+		
+		
+	/*********************输出*********************//*********************输出*********************//*********************输出*********************/	
+		#if 1
+		if(pwm_state==0||pwm_state==2)
+		{
+			pwm_duty(PWMA_CH3P_P64, 0);
+			pwm_duty(PWMA_CH2P_P62, 0);
+			pwm_duty(PWMA_CH4P_P66, 0);
+			pwm_duty(PWMA_CH1P_P60, 0);
+			current_l_pwm_duty = 0;
+			current_r_pwm_duty = 0;
+			current_l_pwm_inc=0;
+			current_r_pwm_inc=0;
+		}
+
+		
+		else if(pwm_state==1)
+		{
+			if(current_l_pwm_duty > 0)
+			{
+				pwm_duty(PWMA_CH4P_P66, (uint32)current_l_pwm_duty);
+				pwm_duty(PWMA_CH1P_P60, 0);
+			}
+			else if(current_l_pwm_duty < 0)
+			{
+				pwm_duty(PWMA_CH4P_P66, 0);
+				pwm_duty(PWMA_CH1P_P60, (uint32)(-current_l_pwm_duty));
+			}
+			else
+			{
+				pwm_duty(PWMA_CH4P_P66, 0);
+				pwm_duty(PWMA_CH1P_P60, 0);
+			}
+
+			if(current_r_pwm_duty > 0)
+			{
+				pwm_duty(PWMA_CH3P_P64, (uint32)current_r_pwm_duty);
+				pwm_duty(PWMA_CH2P_P62, 0);
+			}
+			else if(current_r_pwm_duty < 0)
+			{
+				pwm_duty(PWMA_CH3P_P64, 0);
+				pwm_duty(PWMA_CH2P_P62, (uint32)(-current_r_pwm_duty));
+			}
+			else
+			{
+				pwm_duty(PWMA_CH3P_P64, 0);
+				pwm_duty(PWMA_CH2P_P62, 0);
+			}
+		}
+
+		
+		#endif
+	
+
+	
+}
+
+

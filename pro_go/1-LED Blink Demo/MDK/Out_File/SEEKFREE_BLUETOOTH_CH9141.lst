@@ -1,0 +1,195 @@
+C251 COMPILER V5.60.0,  SEEKFREE_BLUETOOTH_CH9141                                          31/03/25  21:07:20  PAGE 1   
+
+
+C251 COMPILER V5.60.0, COMPILATION OF MODULE SEEKFREE_BLUETOOTH_CH9141
+OBJECT MODULE PLACED IN .\Out_File\SEEKFREE_BLUETOOTH_CH9141.obj
+COMPILER INVOKED BY: C:\Keil_v5\C251\BIN\C251.EXE ..\..\Libraries\seekfree_peripheral\SEEKFREE_BLUETOOTH_CH9141.c XSMALL
+                    - WARNINGLEVEL(3) OPTIMIZE(0,SPEED) BROWSE INCDIR(..\..\Libraries\libraries;..\..\Libraries\seekfree_libraries;..\..\Libr
+                    -aries\seekfree_peripheral;..\CODE;..\USER\inc;..\USER\src;..\..\Libraries\seekfree_components;..\USER\inc;..\USER\src;..
+                    -\MDK) DEBUG PRINT(.\Out_File\SEEKFREE_BLUETOOTH_CH9141.lst) TABS(2) OBJECT(.\Out_File\SEEKFREE_BLUETOOTH_CH9141.obj) 
+
+stmt  level    source
+
+    1          /********************************************************************************************************
+             -*************
+    2           * COPYRIGHT NOTICE
+    3           * Copyright (c) 2021,Öð·É¿Æ¼¼
+    4           * All rights reserved.
+    5           * ¼¼ÊõÌÖÂÛQQÈº£ºÒ»Èº£º179029047(ÒÑÂú)  ¶þÈº£º244861897
+    6           *
+    7           * ÒÔÏÂËùÓÐÄÚÈÝ°æÈ¨¾ùÊôÖð·É¿Æ¼¼ËùÓÐ£¬Î´¾­ÔÊÐí²»µÃÓÃÓÚÉÌÒµÓÃÍ¾£¬
+    8           * »¶Ó­¸÷Î»Ê¹ÓÃ²¢´«²¥±¾³ÌÐò£¬ÐÞ¸ÄÄÚÈÝÊ±±ØÐë±£ÁôÖð·É¿Æ¼¼µÄ°æÈ¨ÉùÃ÷¡£
+    9           *
+   10           * @file          Öð·É¿Æ¼¼À¶ÑÀ×ª´®¿ÚÄ£¿é
+   11           * @company       ³É¶¼Öð·É¿Æ¼¼ÓÐÏÞ¹«Ë¾
+   12           * @author        Öð·É¿Æ¼¼(QQ3184284598)
+   13           * @version       ²é¿´docÄÚversionÎÄ¼þ °æ±¾ËµÃ÷
+   14           * @Software    MDK FOR C251 V5.60
+   15           * @Target core   STC32G12K128
+   16           * @Taobao      https://seekfree.taobao.com/
+   17           * @date          2021-08-27
+   18           * @note
+   19                    ½ÓÏß¶¨Òå£º
+   20                    ------------------------------------
+   21                    CH9141À¶ÑÀ×ª´®¿Ú      µ¥Æ¬»ú
+   22                    RX              ²é¿´SEEKFREE_BLUETOOTH_CH9141.hÎÄ¼þÖÐµÄBLUETOOTH_CH9141_UART_TXºê¶¨Òå
+   23                    TX              ²é¿´SEEKFREE_BLUETOOTH_CH9141.hÎÄ¼þÖÐµÄBLUETOOTH_CH9141_UART_RXºê¶¨Òå
+   24                    RTS             ²é¿´SEEKFREE_BLUETOOTH_CH9141.hÎÄ¼þÖÐµÄBLUETOOTH_CH9141_RTS_PINºê¶¨Òå
+   25                    CTS             Ðü¿Õ
+   26                    CMD             Ðü¿Õ»òÕßÉÏÀ­
+   27                    ------------------------------------
+   28           ********************************************************************************************************
+             -************/
+   29          #include "stdio.h"
+   30          #include "string.h"
+   31          #include "board.h"
+   32          #include "zf_gpio.h"
+   33          #include "zf_uart.h"
+   34          #include "zf_nvic.h"
+   35          #include "zf_delay.h"
+   36          #include "zf_fifo.h"
+   37          
+   38          #include "SEEKFREE_BLUETOOTH_CH9141.h"
+   39          
+   40          
+   41          
+   42          static  fifo_struct     xdata bluetooth_ch9141_fifo = {0};
+   43          static  uint8           xdata bluetooth_ch9141_buffer[BLUETOOTH_CH9141_BUFFER_SIZE] = {0};  // Êý¾Ý´æ·ÅÊý
+             -×é
+   44          
+   45          
+   46          //-------------------------------------------------------------------------------------------------------
+             -------------
+   47          //  @brief      ch9141À¶ÑÀ×ª´®¿ÚÄ£¿é ´®¿ÚÖÐ¶Ï»Øµ÷º¯Êý
+   48          //  @param      void
+   49          //  @return     void
+   50          //  Sample usage:
+   51          //  @note       ¸Ãº¯ÊýÔÚISRÎÄ¼þ ´®¿ÚÖÐ¶Ï³ÌÐò±»µ÷ÓÃ
+   52          //-------------------------------------------------------------------------------------------------------
+C251 COMPILER V5.60.0,  SEEKFREE_BLUETOOTH_CH9141                                          31/03/25  21:07:20  PAGE 2   
+
+             -------------
+   53          void bluetooth_ch9141_uart_callback (uint8 dat)
+   54          {
+   55   1          // ½Óµ½Ò»¸ö×Ö½Úºóµ¥Æ¬»ú½«»á½øÈë´®¿ÚÖÐ¶Ï£¬Í¨¹ýÔÚ´Ë´¦¶ÁÈ¡dat¿ÉÒÔÈ¡×ßÊý¾Ý
+   56   1          fifo_write_buffer(&bluetooth_ch9141_fifo, &dat, 1);       // ´æÈë FIFO
+   57   1      }
+   58          
+   59          
+   60          //-------------------------------------------------------------------------------------------------------
+             -------------
+   61          //  @brief      ch9141À¶ÑÀÄ£¿é·¢ËÍÒ»¸ö×Ö½Ú
+   62          //  @param      dat   ÐèÒª·¢ËÍµÄ×Ö½Ú³¤¶È
+   63          //  @return     uint8 0³É¹¦£¬1Ê§°Ü        
+   64          //  @since      v1.0
+   65          //  Sample usage: 
+   66          //  @note       
+   67          //-------------------------------------------------------------------------------------------------------
+             -------------
+   68          uint8 bluetooth_ch9141send_byte(uint8 dat)
+   69          {
+   70   1        if(BLUETOOTH_CH9141_RTS_PIN == 1)  
+   71   1        {
+   72   2          return 1;//Ä£¿éÃ¦,Èç¹ûÔÊÐíµ±Ç°³ÌÐòÊ¹ÓÃwhileµÈ´ý Ôò¿ÉÒÔÊ¹ÓÃºóÃæ×¢ÊÍµÄwhileµÈ´ýÓï¾äÌæ»»±¾ifÓï¾ä
+   73   2        }
+   74   1        
+   75   1        uart_putchar(BLUETOOTH_CH9141_INDEX, dat);
+   76   1        return 0;
+   77   1      }
+   78          
+   79          //-------------------------------------------------------------------------------------------------------
+             -------------
+   80          //  @brief      ch9141À¶ÑÀ×ª´®¿ÚÄ£¿é ·¢ËÍº¯Êý
+   81          //  @param      buff            ÐèÒª·¢ËÍµÄÊý¾ÝµØÖ·
+   82          //  @param      len             ·¢ËÍ³¤¶È
+   83          //  @return     uint32          Ê£ÓàÎ´·¢ËÍµÄ×Ö½ÚÊý
+   84          //  Sample usage:
+   85          //-------------------------------------------------------------------------------------------------------
+             -------------
+   86          uint32 bluetooth_ch9141_send_buff (uint8 *buff, uint32 len)
+   87          {
+   88   1          uint16 xdata time_count = 0;
+   89   1          while(len > 30)
+   90   1          {
+   91   2              time_count = 0;
+   92   2              while(BLUETOOTH_CH9141_RTS_PIN && time_count++ < BLUETOOTH_CH9141_TIMEOUT_COUNT)  // Èç¹ûRTSÎªµÍµ
+             -çÆ½£¬Ôò¼ÌÐø·¢ËÍÊý¾Ý
+   93   2                  delay_ms(1);
+   94   2              if(time_count >= BLUETOOTH_CH9141_TIMEOUT_COUNT)
+   95   2                  return len;                                                         // Ä£¿éÃ¦,Èç¹ûÔÊÐíµ±Ç°³ÌÐ
+             -òÊ¹ÓÃwhileµÈ´ý Ôò¿ÉÒÔÊ¹ÓÃºóÃæ×¢ÊÍµÄwhileµÈ´ýÓï¾äÌæ»»±¾ifÓï¾ä
+   96   2              uart_putbuff(BLUETOOTH_CH9141_INDEX, buff, 30);
+   97   2              buff += 30;                                                             // µØÖ·Æ«ÒÆ
+   98   2              len -= 30;                                                              // ÊýÁ¿
+   99   2          }
+  100   1          time_count = 0;
+  101   1          while(BLUETOOTH_CH9141_RTS_PIN && time_count++ < BLUETOOTH_CH9141_TIMEOUT_COUNT)      // Èç¹ûRTSÎªµÍµ
+             -çÆ½£¬Ôò¼ÌÐø·¢ËÍÊý¾Ý
+  102   1              delay_ms(1);
+  103   1          if(time_count >= BLUETOOTH_CH9141_TIMEOUT_COUNT)
+  104   1              return len;                                                             // Ä£¿éÃ¦,Èç¹ûÔÊÐíµ±Ç°³ÌÐ
+             -òÊ¹ÓÃwhileµÈ´ý Ôò¿ÉÒÔÊ¹ÓÃºóÃæ×¢ÊÍµÄwhileµÈ´ýÓï¾äÌæ»»±¾ifÓï¾ä
+  105   1          uart_putbuff(BLUETOOTH_CH9141_INDEX, buff, (uint16)len);                            // ·¢ËÍ×îºóµÄÊý¾Ý
+  106   1          return 0;
+  107   1      }
+  108          
+  109          //-------------------------------------------------------------------------------------------------------
+C251 COMPILER V5.60.0,  SEEKFREE_BLUETOOTH_CH9141                                          31/03/25  21:07:20  PAGE 3   
+
+             -------------
+  110          //  @brief      ch9141À¶ÑÀ×ª´®¿ÚÄ£¿é ¶ÁÈ¡º¯Êý
+  111          //  @param      buff            ´æ´¢µÄÊý¾ÝµØÖ·
+  112          //  @param      len             ³¤¶È
+  113          //  @return     uint32          Êµ¼Ê¶ÁÈ¡×Ö½ÚÊý
+  114          //  Sample usage:
+  115          //-------------------------------------------------------------------------------------------------------
+             -------------
+  116          uint32 bluetooth_ch9141_read_buff (uint8 *buff, uint32 len)
+  117          {
+  118   1          uint32 xdata data_len = len;
+  119   1          fifo_read_buffer(&bluetooth_ch9141_fifo, buff, &data_len, FIFO_READ_AND_CLEAN);
+  120   1          return data_len;
+  121   1      }
+  122          
+  123          //-------------------------------------------------------------------------------------------------------
+             -------------
+  124          //  @brief      ch9141À¶ÑÀ×ª´®¿ÚÄ£¿é³õÊ¼»¯
+  125          //  @param      mode            À¶ÑÀÄ£Ê½ MASTER_MODE(Ö÷»ú)»òÕßSLAVE_MODE(´Ó»ú)
+  126          // @return      uint8           ³õÊ¼»¯×´Ì¬ 0-³É¹¦ 1-Ê§°Ü
+  127          //  Sample usage:
+  128          //-------------------------------------------------------------------------------------------------------
+             -------------
+  129          void bluetooth_ch9141_init (void)
+  130          {
+  131   1          wireless_type = WIRELESS_CH9141;
+  132   1        wireless_module_uart_handler = bluetooth_ch9141_uart_callback;
+  133   1          // ±¾º¯ÊýÊ¹ÓÃµÄ²¨ÌØÂÊÎª115200 ÎªÀ¶ÑÀ×ª´®¿ÚÄ£¿éµÄÄ¬ÈÏ²¨ÌØÂÊ ÈçÐèÆäËû²¨ÌØÂÊÇëÊ¹ÓÃÉÏÎ»»úÐÞ¸ÄÄ£¿é²ÎÊý
+  134   1          fifo_init(&bluetooth_ch9141_fifo, FIFO_DATA_8BIT, bluetooth_ch9141_buffer, BLUETOOTH_CH9141_BUFFER_SI
+             -ZE);
+  135   1          uart_init(BLUETOOTH_CH9141_INDEX, BLUETOOTH_CH9141_TX_PIN, BLUETOOTH_CH9141_RX_PIN, BLUETOOTH_CH9141_
+             -BUAD_RATE, BLUETOOTH_CH9141_TIMER);
+  136   1      }
+
+
+Module Information          Static   Overlayable
+------------------------------------------------
+  code size            =       429     ------
+  ecode size           =    ------     ------
+  data size            =    ------     ------
+  idata size           =    ------     ------
+  pdata size           =    ------     ------
+  xdata size           =        93     ------
+  xdata-const size     =    ------     ------
+  edata size           =        18     ------
+  bit size             =    ------     ------
+  ebit size            =    ------     ------
+  bitaddressable size  =    ------     ------
+  ebitaddressable size =    ------     ------
+  far data size        =    ------     ------
+  huge data size       =    ------     ------
+  const size           =    ------     ------
+  hconst size          =        97     ------
+End of Module Information.
+
+
+C251 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

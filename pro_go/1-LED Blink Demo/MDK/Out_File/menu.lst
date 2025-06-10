@@ -1,0 +1,627 @@
+C251 COMPILER V5.60.0,  menu                                                               06/06/25  17:43:24  PAGE 1   
+
+
+C251 COMPILER V5.60.0, COMPILATION OF MODULE menu
+OBJECT MODULE PLACED IN .\Out_File\menu.obj
+COMPILER INVOKED BY: C:\Keil_v5\C251\BIN\C251.EXE menu.c XSMALL WARNINGLEVEL(3) OPTIMIZE(0,SPEED) BROWSE INCDIR(..\..\Li
+                    -braries\libraries;..\..\Libraries\seekfree_libraries;..\..\Libraries\seekfree_peripheral;..\CODE;..\USER\inc;..\USER\src
+                    -;..\..\Libraries\seekfree_components;..\USER\inc;..\USER\src;..\MDK) DEBUG PRINT(.\Out_File\menu.lst) TABS(2) OBJECT(.\O
+                    -ut_File\menu.obj) 
+
+stmt  level    source
+
+    1          #include "headfile.h"
+    2          #include "control.h"
+    3          #include "Menu.h"
+    4          #include "isr.h"
+    5          
+    6          uint8 key_mode_local =0;
+    7          /****************电机****************//****************电机****************//****************电机**
+             -**************/
+    8          
+    9          void display_motor(_PID* sptr, float speed_now, uint16 pwm_duty,  char* direction,uint8 key_press)
+   10          {
+   11   1          static unsigned char key_mode_local; 
+   12   1      //    unsigned char key_value_test=0;
+   13   1      //    key_value_test = key_scan(1);
+   14   1      
+   15   1          if (key_press == 3) {
+   16   2              lcd_clear(WHITE); 
+   17   2              key_mode_local++;
+   18   2              if (key_mode_local >= 3) key_mode_local = 0; 
+   19   2          }
+   20   1      
+   21   1          switch (key_mode_local) {
+   22   2              case 0:
+   23   2                  key_press = key_scan(1);
+   24   2                  adjust_parameter_by_key_float(key_press, &sptr->kp, 0.005);
+   25   2                  break;
+   26   2              case 1:
+   27   2                  key_press = key_scan(1);
+   28   2                  adjust_parameter_by_key_float(key_press, &sptr->ki, 0.001);
+   29   2                  break;
+   30   2              case 2:
+   31   2                  key_press = key_scan(1);
+   32   2                  adjust_parameter_by_key_float(key_press, &sptr->kd, 0.005);
+   33   2                  break;
+   34   2      
+   35   2              default:
+   36   2                  break;
+   37   2          }
+   38   1      
+   39   1          
+   40   1          lcd_showfloat(0, 0, sptr->kp, 3, 6);
+   41   1          lcd_showstr(80, 0, " Kp ");
+   42   1          if (key_mode_local == 0) lcd_showstr(120, 0, "<"); else lcd_showstr(120, 0, " ");
+   43   1      
+   44   1          lcd_showfloat(0, 1, sptr->ki, 4, 6);
+   45   1          lcd_showstr(80, 1, " Ki ");
+   46   1          if (key_mode_local == 1) lcd_showstr(120, 1, "<"); else lcd_showstr(120, 1, " ");
+   47   1      
+   48   1          lcd_showfloat(0, 2, sptr->kd, 3, 6);
+   49   1          lcd_showstr(80, 2, " Kd ");
+   50   1          if (key_mode_local == 2) lcd_showstr(120, 2, "<"); else lcd_showstr(120, 2, " ");
+   51   1      
+   52   1          lcd_showfloat(3, 3, sptr->kp_out, 3, 2);
+   53   1          lcd_showstr(60, 3, " pout ");
+   54   1      
+   55   1          lcd_showfloat(3, 4, sptr->ki_out, 3, 2);
+C251 COMPILER V5.60.0,  menu                                                               06/06/25  17:43:24  PAGE 2   
+
+   56   1          lcd_showstr(60, 4, " iout ");
+   57   1      
+   58   1          lcd_showfloat(3, 5, sptr->kd_out, 3, 2);
+   59   1          lcd_showstr(60, 5, " dout ");
+   60   1      
+   61   1          lcd_showuint16(0, 6, pwm_duty);
+   62   1          lcd_showstr(60, 6, " pwm ");
+   63   1      
+   64   1          lcd_showfloat(0, 7, speed_now, 3, 3);
+   65   1          lcd_showstr(60, 7, " V_now ");
+   66   1      
+   67   1          lcd_showuint16(0, 8, sptr->Target);
+   68   1          lcd_showstr(60, 8, " tar ");
+   69   1      
+   70   1          lcd_showstr(0, 9, direction);
+   71   1        
+   72   1      
+   73   1      }
+   74          
+   75          
+   76          
+   77          
+   78          void display_t(void)
+   79          {
+   80   1          static unsigned char key_mode = 0;
+   81   1          unsigned char key_value_test;
+   82   1      
+   83   1          key_value_test = key_scan(1);
+   84   1      
+   85   1          if (key_value_test == 3) {
+   86   2              lcd_clear(WHITE);
+   87   2              key_mode++;
+   88   2              if (key_mode >= 5) key_mode = 0; // 调整循环到参数数量 (kp, ki, kd, kp1, kd2, err_t, x_t
+             -_int 共7个)
+   89   2          }
+   90   1      
+   91   1          switch (key_mode) {
+   92   2              case 0:
+   93   2                  adjust_parameter_by_key_float(key_value_test, &Turn_PID.kp, (float)x_t_int * x_t_float);
+   94   2                  break;
+   95   2              case 1:
+   96   2                  adjust_parameter_by_key_float(key_value_test, &Turn_PID.ki, (float)x_t_int * x_t_float);
+   97   2                  break;
+   98   2              case 2:
+   99   2                  adjust_parameter_by_key_float(key_value_test, &Turn_PID.kd, (float)x_t_int * x_t_float);
+  100   2                  break;
+  101   2              case 3:
+  102   2                  adjust_parameter_by_key_float(key_value_test, &Turn_PID.kp1, (float)x_t_int * x_t_float*0.01)
+             -;
+  103   2                  break;
+  104   2              case 4:
+  105   2                  adjust_parameter_by_key_float(key_value_test, &Turn_PID.kd2, (float)x_t_int * x_t_float); // 
+             -添加对 kd2 的调整
+  106   2                  break;
+  107   2              default:
+  108   2                  break;
+  109   2          }
+  110   1      
+  111   1          lcd_showfloat(0, 0, Turn_PID.kp, 5, 3);
+  112   1          lcd_showstr(80, 0, " Kp ");
+  113   1          if (key_mode == 0) lcd_showstr(120, 0, "<"); else lcd_showstr(120, 0, " ");
+  114   1      
+  115   1          lcd_showfloat(0, 1, Turn_PID.ki, 4, 6);
+  116   1          lcd_showstr(80, 1, " Ki ");
+  117   1          if (key_mode == 1) lcd_showstr(120, 1, "<"); else lcd_showstr(120, 1, " ");
+  118   1      
+C251 COMPILER V5.60.0,  menu                                                               06/06/25  17:43:24  PAGE 3   
+
+  119   1          lcd_showfloat(0, 2, Turn_PID.kd, 3, 6);
+  120   1          lcd_showstr(80, 2, " Kd ");
+  121   1          if (key_mode == 2) lcd_showstr(120, 2, "<"); else lcd_showstr(120, 2, " ");
+  122   1      
+  123   1          lcd_showfloat(0, 3, Turn_PID.kp1, 3, 6);
+  124   1          lcd_showstr(80, 3, " Kp1 ");
+  125   1          if (key_mode == 3) lcd_showstr(120, 3, "<"); else lcd_showstr(120, 3, " ");
+  126   1      
+  127   1          lcd_showfloat(0, 4, Turn_PID.kd2, 3, 6); // 显示 kd2
+  128   1          lcd_showstr(80, 4, " Kd2 ");
+  129   1          if (key_mode == 4) lcd_showstr(120, 4, "<"); else lcd_showstr(120, 4, " ");
+  130   1      
+  131   1          lcd_showfloat(0, 5, err_t, 2, 4);
+  132   1          lcd_showstr(80, 5, " e_t ");
+  133   1          if (key_mode == 5) lcd_showstr(120, 5, "<"); else lcd_showstr(120, 5, " ");
+  134   1      
+  135   1          
+  136   1          
+  137   1          
+  138   1          lcd_showstr(0, 9, "turn");
+  139   1          lcd_showfloat(20, 9, x_t_int * x_t_float, 2,3);
+  140   1      }
+  141          // Global variables for menu state
+  142          int current_menu_level = 1; // 1 = Main Menu, 2 = Submenu
+  143          int main_menu_selection = 0; // Index of the highlighted item in the main menu (0 to 5 - 1)
+  144          int active_submenu = -1; // Which submenu is active (-1 if none)
+  145          uint8 key_value_test = 0; // Stores the result of key_scan
+  146          
+  147          #define MAIN_MENU_ITEMS 6   // ���˵�������
+  148          #define CURSOR_X_POS    100   // ָʾ��ͷ "<<<" ��ʾ�� X ����
+  149          #define CURSOR_STR      "< " // ָʾ��ͷ�ַ��� (���Ե������Ⱥ���ʽ)
+  150          #define NO_CURSOR_STR   "  " // ���������ͷ�Ŀո��ַ��� (ȷ������
+             -��ƥ�� CURSOR_STR)
+  151          
+  152          // --- ȷ����Щȫ�ֱ�������������Ĵ����ж����� ---
+  153          extern int main_menu_selection; // ��ǰѡ�еĲ˵������� (0 �� MAIN_MENU_ITEMS - 1
+             -)
+  154          extern const char *main_menu_options[MAIN_MENU_ITEMS]; // �洢�˵����ı�������
+  155          
+  156          
+  157          
+  158          const char *main_menu_options[MAIN_MENU_ITEMS] = {
+  159              "R_PID",
+  160              "L_PID",
+  161              "TURN_PID",
+  162              "check",
+  163              "MOVE",
+  164              "ERROR"
+  165          };
+  166          
+  167          
+  168          void display_r(uint8 key_press) {
+  169   1          
+  170   1        
+  171   1        
+  172   1          static unsigned char key_mode = 0;
+  173   1      
+  174   1        
+  175   1            if (key_press == 3) {
+  176   2              lcd_clear(WHITE); 
+  177   2              key_mode++;
+  178   2              if (key_mode >= 5) key_mode = 0; // Adjust cycling to the number of parameters
+  179   2          }
+  180   1            
+  181   1        
+  182   1            switch (key_mode) {
+C251 COMPILER V5.60.0,  menu                                                               06/06/25  17:43:24  PAGE 4   
+
+  183   2              case 0:
+  184   2                  key_press = key_scan(1);
+  185   2                  adjust_parameter_by_key_float(key_press, &Turn_PID.kp, 5);
+  186   2                  break;
+  187   2              case 1:
+  188   2                  key_press = key_scan(1);
+  189   2                  adjust_parameter_by_key_float(key_press, &Turn_PID.ki, 0.001);
+  190   2                  break;
+  191   2              case 2:
+  192   2                  key_press = key_scan(1);
+  193   2                  adjust_parameter_by_key_float(key_press, &Turn_PID.kd, 0.005);
+  194   2                  break;
+  195   2              case 3:
+  196   2                  key_press = key_scan(1);
+  197   2                  adjust_parameter_by_key_float(key_press, &Turn_PID.kp1, 0.005);
+  198   2                  break;
+  199   2              default:
+  200   2                  break;
+  201   2          }
+  202   1            
+  203   1          
+  204   1          lcd_showfloat(0, 0, Turn_PID.kp, 5, 3);
+  205   1          lcd_showstr(80, 0, " Kp ");
+  206   1          if (key_mode == 0) lcd_showstr(120, 0, CURSOR_STR); else lcd_showstr(120, 0, NO_CURSOR_STR);
+  207   1      
+  208   1          lcd_showfloat(0, 1, Turn_PID.ki, 4, 6);
+  209   1          lcd_showstr(80, 1, " Ki ");
+  210   1          if (key_mode == 1) lcd_showstr(120, 1, CURSOR_STR); else lcd_showstr(120, 1, NO_CURSOR_STR);
+  211   1      
+  212   1          lcd_showfloat(0, 2, Turn_PID.kd, 3, 6);
+  213   1          lcd_showstr(80, 2, " Kd ");
+  214   1          if (key_mode == 2) lcd_showstr(120, 2, CURSOR_STR); else lcd_showstr(120, 2, NO_CURSOR_STR);
+  215   1      
+  216   1          lcd_showfloat(0, 3, Turn_PID.kp1, 3, 6);
+  217   1          lcd_showstr(80, 3, " Kp1 ");
+  218   1          if (key_mode == 3) lcd_showstr(120, 3, CURSOR_STR); else lcd_showstr(120, 2, NO_CURSOR_STR);
+  219   1        
+  220   1      
+  221   1      
+  222   1          
+  223   1      
+  224   1      }
+  225          /****************主屏幕****************//****************主屏幕****************//****************�
+             -�屏幕****************/
+  226          
+  227          
+  228          void display_submenu_check() {
+  229   1        
+  230   1        
+  231   1      //          lcd_showuint16(0,0,L);
+  232   1      //          lcd_showuint16(60,0,R);
+  233   1      //          lcd_showuint16(0,1,LM);
+  234   1      //          lcd_showuint16(60,1,RM);
+  235   1      //          lcd_showuint16(0,2,MID);
+  236   1      //          lcd_showuint16(60,2,L+R+LM+RM+MID);
+  237   1      
+  238   1      //          lcd_showstr(80, 3, "error");          
+  239   1      //          lcd_showfloat(0,3,Turn_PID.err,2,4);
+  240   1      
+  241   1      //          key_value_test=key_scan(1);
+  242   1      //          adjust_parameter_by_key_float(key_value_test,&R_pid.Target,(float)x_t_int * x_t_float);
+  243   1      //        //串级记得换
+  244   1      //          L_pid.Target=R_pid.Target;
+  245   1      //          lcd_showfloat(0,4,l_speed_now,4,2);   
+  246   1      //          lcd_showfloat(60,4,r_speed_now,4,2);
+  247   1      //          lcd_showfloat(0,5,angular_acceleration*err_t,4,2);
+C251 COMPILER V5.60.0,  menu                                                               06/06/25  17:43:24  PAGE 5   
+
+  248   1      //          
+  249   1      //          lcd_showint32(0,6,(int32)current_l_pwm_duty,6);   
+  250   1      //          lcd_showint32(60,6,(int32)current_r_pwm_duty,6);    
+  251   1      //          
+  252   1      //          lcd_showint32(0 ,7, (int32)L_pid.Target,4);   
+  253   1      //          lcd_showint32(50,7,(int32)R_pid.Target,4);    
+  254   1      //          
+  255   1      //          lcd_showint32(40,8,(int32)Turn_PID.out,6);    
+  256   1      //          lcd_showstr(0, 9, "check");
+  257   1      //          lcd_showfloat(0,8,mot_inc,2,3);
+  258   1      
+  259   1                lcd_showuint16(0,0,L);
+  260   1                lcd_showuint16(60,0,R);
+  261   1                lcd_showuint16(0,1,LM);
+  262   1                lcd_showuint16(60,1,RM);
+  263   1                lcd_showuint16(0,2,MID);
+  264   1                lcd_showuint16(60,2,L+R+LM+RM+MID);
+  265   1      
+  266   1                lcd_showstr(80, 3, "error");          
+  267   1                lcd_showfloat(0,3,Turn_PID.err,2,4);
+  268   1      
+  269   1                key_value_test=key_scan(1);
+  270   1                
+  271   1                #if 0
+                         adjust_parameter_by_key_float(key_value_test,&R_pid.Target,(float)x_t_int * x_t_float);
+                         L_pid.Target=R_pid.Target;
+                         lcd_showint32(0 ,7, (int32)L_pid.Target,4);   
+                         lcd_showint32(50,7,(int32)R_pid.Target,4);    
+                         #endif
+  277   1                
+  278   1                #if 1
+  279   1                adjust_parameter_by_key_float(key_value_test,&R_pid.Target_base,(float)x_t_int * x_t_float);
+  280   1                L_pid.Target_base=R_pid.Target_base;          
+  281   1                lcd_showfloat(0,7,L_pid.Target_base,4,0);   
+  282   1                lcd_showfloat(70,7,R_pid.Target_base,4,0);
+  283   1                
+  284   1                #endif
+  285   1                
+  286   1                
+  287   1                
+  288   1                lcd_showfloat(0,4,l_speed_now,4,2);   
+  289   1                lcd_showfloat(60,4,r_speed_now,4,2);
+  290   1                
+  291   1                lcd_showint32(0,6,(int32)current_l_pwm_duty,6);   
+  292   1                lcd_showint32(60,6,(int32)current_r_pwm_duty,6);    
+  293   1                
+  294   1      
+  295   1                
+  296   1      
+  297   1                lcd_showfloat(50,9,cir_angle_flag,2,2);
+  298   1                lcd_showfloat(0,9,cir_flag,2,2);
+  299   1                lcd_showfloat(0,8,mot_inc_element,2,3);
+  300   1      
+  301   1      }
+  302          
+  303          
+  304          
+  305          /****************步进值****************//****************步进值****************//****************�
+             -�进值****************/
+  306          void display_submenu_ee() {
+  307   1          static unsigned char key_mode = 0;
+  308   1          unsigned char key_value_test;
+  309   1      
+  310   1          key_value_test = key_scan(1);
+  311   1      
+  312   1          if (key_value_test == 3) {
+C251 COMPILER V5.60.0,  menu                                                               06/06/25  17:43:24  PAGE 6   
+
+  313   2              lcd_clear(WHITE);
+  314   2              key_mode++;
+  315   2              if (key_mode >= 3) key_mode = 0; 
+  316   2                lcd_clear(WHITE); // Clear screen for submenu
+  317   2          }
+  318   1      
+  319   1          switch (key_mode) {
+  320   2      
+  321   2              case 0:
+  322   2                  adjust_parameter_by_key_float(key_value_test, &x_t_int, 2);
+  323   2                  break;
+  324   2               case 1:
+  325   2                  adjust_parameter_by_key_float(key_value_test, &x_t_float, 0.1);
+  326   2                  break;
+  327   2               case 2:
+  328   2                  adjust_parameter_by_key_float(key_value_test, &err_t, (float)x_t_int * x_t_float*0.00001);
+  329   2                  break;
+  330   2              default:      
+  331   2                  break;
+  332   2          }
+  333   1      
+  334   1      
+  335   1          
+  336   1          lcd_showfloat(0, 0, x_t_int, 2, 4);
+  337   1          lcd_showstr(80, 0, " x_t ");
+  338   1          if (key_mode == 0) lcd_showstr(120, 0, "<"); else lcd_showstr(120, 0, " ");
+  339   1          
+  340   1          lcd_showfloat(0, 1, x_t_float, 2, 4);
+  341   1          lcd_showstr(80, 1, " x_f ");
+  342   1          if (key_mode == 1) lcd_showstr(120,1, "<"); else lcd_showstr(120, 1, " ");
+  343   1          
+  344   1          lcd_showfloat(0, 2, err_t, 2, 4);
+  345   1          lcd_showstr(80, 2, " e_t ");
+  346   1          if (key_mode == 2) lcd_showstr(120,2, "<"); else lcd_showstr(120, 2, " ");
+  347   1          
+  348   1          
+  349   1          
+  350   1          lcd_showfloat(20, 9, x_t_int * x_t_float, 2,3);
+  351   1      }
+  352          /****************角速度****************//****************角速度****************//****************�
+             -�速度****************/
+  353          
+  354          void display_gyro(uint8 key_press) {
+  355   1          
+  356   1        
+  357   1        
+  358   1          static unsigned char key_mode = 0;
+  359   1      
+  360   1        
+  361   1            if (key_press == 3) {
+  362   2              lcd_clear(WHITE); 
+  363   2              key_mode++;
+  364   2              if (key_mode >= 7) key_mode = 0; // Adjust cycling to the number of parameters
+  365   2          }
+  366   1            
+  367   1        
+  368   1            switch (key_mode) {
+  369   2                case 0:
+  370   2                    adjust_parameter_by_key_float(key_press, &dir_loop_limit, (float)x_t_int * x_t_float);
+  371   2                    break;
+  372   2                case 1:
+  373   2                    adjust_parameter_by_key_float(key_press, &dir_enlarge, (float)x_t_int * x_t_float);
+  374   2                    break;
+  375   2                case 2:
+  376   2                     adjust_parameter_by_key_float(key_press, &err_H, (float)x_t_int * x_t_float*0.1);
+  377   2                     break;
+C251 COMPILER V5.60.0,  menu                                                               06/06/25  17:43:24  PAGE 7   
+
+  378   2                case 3:
+  379   2                      adjust_parameter_by_key_float(key_press, &err_X, (float)x_t_int * x_t_float*0.1);
+  380   2                      break;
+  381   2                case 4:
+  382   2                      adjust_parameter_by_key_float(key_press, &err_HM, (float)x_t_int * x_t_float*0.1);
+  383   2                case 5:
+  384   2                      adjust_parameter_by_key_float(key_press, &err_d, (float)x_t_int * x_t_float*0.1);
+  385   2                case 6:
+  386   2                      adjust_parameter_by_key_float(key_press, &err_M, (float)x_t_int * x_t_float*0.1);
+  387   2                
+  388   2                default:
+  389   2                    break;
+  390   2          }
+  391   1          
+  392   1          
+  393   1          lcd_showfloat(0, 0, dir_loop_limit, 5, 2);
+  394   1          lcd_showstr(70, 0, " mit");
+  395   1          if (key_mode == 0) lcd_showstr(120, 0, CURSOR_STR); else lcd_showstr(120, 0, NO_CURSOR_STR);
+  396   1      
+  397   1          lcd_showfloat(0, 1, dir_enlarge, 4, 2);
+  398   1          lcd_showstr(70, 1, " lar");
+  399   1          if (key_mode == 1) lcd_showstr(120, 1, CURSOR_STR); else lcd_showstr(120, 1, NO_CURSOR_STR);
+  400   1      
+  401   1          lcd_showfloat(0, 2, err_H, 2, 4); // 假设 err_H 显示格式为X.XX
+  402   1          lcd_showstr(70, 2, " errH");
+  403   1          if (key_mode == 2) lcd_showstr(120, 2, CURSOR_STR); else lcd_showstr(120, 2, NO_CURSOR_STR);
+  404   1      
+  405   1          lcd_showfloat(0, 3, err_X, 2, 4); // 假设 err_X 显示格式为X.XX
+  406   1          lcd_showstr(70, 3, " errX");
+  407   1          if (key_mode == 3) lcd_showstr(120, 3, CURSOR_STR); else lcd_showstr(120, 3, NO_CURSOR_STR);
+  408   1      
+  409   1          lcd_showfloat(0, 4, err_HM, 2, 4); // 假设 err_HM 显示格式为X.XX
+  410   1          lcd_showstr(70, 4, " errC");
+  411   1          if (key_mode == 4) lcd_showstr(120, 4, CURSOR_STR); else lcd_showstr(120, 4, NO_CURSOR_STR);
+  412   1      
+  413   1          lcd_showfloat(0, 5, err_d, 2, 4); // 假设 err_HM 显示格式为X.XX
+  414   1          lcd_showstr(70, 5, " errD");
+  415   1          if (key_mode == 5) lcd_showstr(120, 5, CURSOR_STR); else lcd_showstr(120, 5, NO_CURSOR_STR);
+  416   1      
+  417   1          lcd_showfloat(0, 6, err_M, 2, 4); // 假设 err_HM 显示格式为X.XX
+  418   1          lcd_showstr(70, 6, " errM");
+  419   1          if (key_mode == 6) lcd_showstr(120, 6, CURSOR_STR); else lcd_showstr(120, 6, NO_CURSOR_STR);
+  420   1          
+  421   1      //    lcd_showfloat(0, 0, Gyro_PID.kp, 5, 3);
+  422   1      //    lcd_showstr(80, 0, " Kp ");
+  423   1      //    if (key_mode == 0) lcd_showstr(120, 0, CURSOR_STR); else lcd_showstr(120, 0, NO_CURSOR_STR);
+  424   1      
+  425   1      //    lcd_showfloat(0, 1, Gyro_PID.ki, 4, 6);
+  426   1      //    lcd_showstr(80, 1, " Ki ");
+  427   1      //    if (key_mode == 1) lcd_showstr(120, 1, CURSOR_STR); else lcd_showstr(120, 1, NO_CURSOR_STR);
+  428   1      
+  429   1      //    lcd_showfloat(0, 2, Gyro_PID.kd, 3, 6);
+  430   1      //    lcd_showstr(80, 2, " Kd ");
+  431   1      //    if (key_mode == 2) lcd_showstr(120, 2, CURSOR_STR); else lcd_showstr(120, 2, NO_CURSOR_STR);
+  432   1      
+  433   1      //    lcd_showfloat(0, 3, Gyro_PID.kp1, 3, 6);
+  434   1      //    lcd_showstr(80, 3, " Kp1 ");
+  435   1      //    if (key_mode == 3) lcd_showstr(120, 3, CURSOR_STR); else lcd_showstr(120, 2, NO_CURSOR_STR);
+  436   1      //  
+  437   1      //    
+  438   1      //    
+  439   1      //    
+  440   1      //    
+  441   1      //    
+  442   1      //    
+  443   1      //    
+C251 COMPILER V5.60.0,  menu                                                               06/06/25  17:43:24  PAGE 8   
+
+  444   1      //    
+  445   1      //    lcd_showfloat(0, 4, Gyro_PID.err, 3, 3);  
+  446   1      //    lcd_showstr(80,4,"err");
+  447   1      //    
+  448   1      //    lcd_showfloat(0, 5, Gyro_PID.out, 4, 3);  
+  449   1      //    lcd_showstr(80,5,"out");
+  450   1      //    
+  451   1      //    
+  452   1      //    lcd_showfloat(0, 6, LEFT_WEIGHT, 4, 3);  
+  453   1      //    lcd_showstr(80,6,"LEFT");
+  454   1      //    if (key_mode == 4) lcd_showstr(120, 6, CURSOR_STR); else lcd_showstr(120, 6, NO_CURSOR_STR);
+  455   1      //    
+  456   1      //    lcd_showfloat(0, 7, RIGHT_WEIGHT, 4, 3);  
+  457   1      //    lcd_showstr(80,7,"RIGHT");
+  458   1      //    if (key_mode == 5) lcd_showstr(120, 7, CURSOR_STR); else lcd_showstr(120, 7, NO_CURSOR_STR);
+  459   1      
+  460   1      
+  461   1      //        lcd_showuint8(0,0,cir_flag);
+  462   1      //        lcd_showstr(70,0,"flag");
+  463   1      //        lcd_showfloat(0,1,mot_inc_element,2,4);
+  464   1      //        lcd_showstr(70,1,"inc");
+  465   1      
+  466   1      //        lcd_showfloat(0,2,gyro_roll,4,2);
+  467   1      //        lcd_showstr(70,2,"gyro");
+  468   1      
+  469   1      //        lcd_showfloat(0,3,Turn_PID.err,4,2);
+  470   1      //        lcd_showstr(70,3,"err");
+  471   1      //        
+  472   1      //        lcd_showuint8(0,4,temp_flag);
+  473   1      //        lcd_showstr(70,4,"temp");
+  474   1      
+  475   1              
+  476   1      
+  477   1      
+  478   1      }
+  479          
+  480          
+  481          // --- Main Menu Display Function (Unchanged) ---
+  482          //The main menu displays content
+  483          void display_main_menu() {
+  484   1          int i = 0;
+  485   1          for ( i = 0; i < MAIN_MENU_ITEMS; i++) {
+  486   2              lcd_showstr(0, i, main_menu_options[i]);
+  487   2              //
+  488   2              if (i == main_menu_selection) {
+  489   3                  lcd_showstr(CURSOR_X_POS, i, CURSOR_STR);
+  490   3              } else {
+  491   3                  lcd_showstr(CURSOR_X_POS, i, NO_CURSOR_STR);
+  492   3              }
+  493   2          }
+  494   1      }
+  495          
+  496          
+  497          
+  498          float x_t_int=1;
+  499          float x_t_float=0.2;
+  500          /****************菜单切换****************//****************菜单切换****************//************
+             -****菜单切换****************/
+  501          
+  502          void display(void)
+  503          {
+  504   1          static unsigned char key_mode = 0;
+  505   1          static unsigned char key_mode_in = -1;
+  506   1      
+  507   1          unsigned char key_value_test;
+  508   1      
+C251 COMPILER V5.60.0,  menu                                                               06/06/25  17:43:24  PAGE 9   
+
+  509   1          key_value_test = key_scan(1);
+  510   1      
+  511   1                if (current_menu_level == 1) {
+  512   2                  // --- Handle Main Menu ---
+  513   2                  if (key_value_test == 3) { // P76 (Down Navigation)
+  514   3                          main_menu_selection++;
+  515   3                      if (main_menu_selection >= MAIN_MENU_ITEMS) {
+  516   4                          main_menu_selection = 0; // Wrap around
+  517   4                      }
+  518   3                        key_scan(1); // IMPORTANT: Reset key state after processing navigation
+  519   3                        display_main_menu(); // Update display immediately
+  520   3                  } else if (key_value_test == 4) { // P46 (Confirm/Enter)
+  521   3                      current_menu_level = 2;
+  522   3                      active_submenu = main_menu_selection;
+  523   3                      key_scan(1);// IMPORTANT: Reset key state after processing action
+  524   3                      lcd_clear(WHITE); // Clear screen for submenu
+  525   3                  } 
+  526   2                      display_main_menu();
+  527   2              } 
+  528   1        
+  529   1            
+  530   1              
+  531   1              
+  532   1            else if (current_menu_level == 2) {
+  533   2                  // --- Handle Submenu ---
+  534   2                  if (key_value_test == 1) { // P77 (Back)
+  535   3                    
+  536   3                      current_menu_level = 1;
+  537   3                      active_submenu = -1;
+  538   3                      key_value_test =key_scan(1); // IMPORTANT: Reset key state after processing action
+  539   3                      lcd_clear(WHITE); // Clear screen for main menu
+  540   3                      display_main_menu(); // Display main menu immediately
+  541   3                  } else {
+  542   3                    
+  543   3                    
+  544   3                      switch (active_submenu) {
+  545   4                          case 0: display_motor(&R_pid,r_speed_now,current_r_pwm_duty,"right", key_value_test);
+             - break;
+  546   4                          case 1: display_motor(&L_pid,l_speed_now,current_l_pwm_duty,"leftt", key_value_test);
+             - break;
+  547   4                          case 2: display_t(); break;
+  548   4                          case 3: display_submenu_check(); break;
+  549   4                          case 4: display_submenu_ee(); break;
+  550   4                          case 5: display_gyro(key_value_test);break;
+  551   4                        
+  552   4                          default:
+  553   4                          lcd_showstr(0, 0, "Error: Invalid Submenu");
+  554   4                          break;
+  555   4                      }
+  556   3                  }
+  557   2              }
+  558   1        
+  559   1        
+  560   1      
+  561   1      }
+
+
+Module Information          Static   Overlayable
+------------------------------------------------
+  code size            =      4491     ------
+  ecode size           =    ------     ------
+  data size            =    ------     ------
+  idata size           =    ------     ------
+  pdata size           =    ------     ------
+  xdata size           =    ------     ------
+  xdata-const size     =    ------     ------
+  edata size           =        69     ------
+C251 COMPILER V5.60.0,  menu                                                               06/06/25  17:43:24  PAGE 10  
+
+  bit size             =    ------     ------
+  ebit size            =    ------     ------
+  bitaddressable size  =    ------     ------
+  ebitaddressable size =    ------     ------
+  far data size        =    ------     ------
+  huge data size       =    ------     ------
+  const size           =    ------     ------
+  hconst size          =       322     ------
+End of Module Information.
+
+
+C251 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

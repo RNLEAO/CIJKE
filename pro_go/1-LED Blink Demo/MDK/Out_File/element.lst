@@ -1,0 +1,409 @@
+C251 COMPILER V5.60.0,  element                                                            08/06/25  09:20:12  PAGE 1   
+
+
+C251 COMPILER V5.60.0, COMPILATION OF MODULE element
+OBJECT MODULE PLACED IN .\Out_File\element.obj
+COMPILER INVOKED BY: C:\Keil_v5\C251\BIN\C251.EXE element.c XSMALL WARNINGLEVEL(3) OPTIMIZE(0,SPEED) BROWSE INCDIR(..\..
+                    -\Libraries\libraries;..\..\Libraries\seekfree_libraries;..\..\Libraries\seekfree_peripheral;..\CODE;..\USER\inc;..\USER\
+                    -src;..\..\Libraries\seekfree_components;..\USER\inc;..\USER\src;..\MDK) DEBUG PRINT(.\Out_File\element.lst) TABS(2) OBJE
+                    -CT(.\Out_File\element.obj) 
+
+stmt  level    source
+
+    1          #include "headfile.h"
+    2          uint16 cir_angle_flag = 0;    // ±Í÷æŒª£¨”√”⁄≈–∂œ∫Õº«¬º»Îª∑ ±µƒ◊Û”“¥ÚΩ«∑ΩœÚ (0: ≥ı º, 1: ”“≤‡»Îª∑, 2: ◊Û≤
+             -‡»Îª∑, 3: ”“≤‡≥ˆª∑, 4: ◊Û≤‡≥ˆª∑)
+    3          uint16 flag_incir = 0;        // ±Í÷æŒª£¨±Ì æ–°≥µ «∑Ò“—æ≠Ω¯»Î‘≤ª∑ƒ⁄ (0: ∑Ò, 1:  «)
+    4          uint8 cir_flag = 0;          // ◊¥Ã¨±Í÷æŒª£¨”√”⁄øÿ÷∆‘≤ª∑ºÏ≤‚∫Õ—≠º£µƒ≤ªÕ¨Ω◊∂Œ (0: ≥ı º, 1: ◊º±∏»Îª∑, 2: ◊º
+             -±∏¥ÚΩ«, 3: ¥ÚΩ«Ω· ¯, 4: ◊º±∏≥ˆª∑, 5: ◊º±∏¿Îø™‘≤ª∑)
+    5          
+    6          uint8 encoder_sign=0;//±‡¬Î∆˜ª˝∑÷ø™πÿ
+    7          uint8 yuansu_flag=1;     //∏˜‘™Àÿ±Í÷æŒª
+    8          uint16 temp_flag=0;
+    9          uint16 temp_flag_speed=0;
+   10          uint8 speed_strategy_active =0;
+   11          
+   12          
+   13          int temp_t;
+   14          
+   15          
+   16          void Circle_detect(void)
+   17          {
+   18   1          static float mot_inc_last_at_entry = 0.0f;
+   19   1          static uint8 in_circle_integration = 0;
+   20   1      
+   21   1          //ºÏ≤‚µΩ‘≤ª∑
+   22   1          //»Îª∑Ãıº˛
+   23   1          if ((yuansu_flag==1)&&(MID >= 95)||(((L+R)>150)&&MID>80) && cir_flag == 0 )
+   24   1          { 
+   25   2              //«Â≥˝
+   26   2          
+   27   2      
+   28   2              gyro_roll_sign_rign=0;//ª˝∑÷ø™πÿ
+   29   2              gyro_roll=0;
+   30   2              mot_inc_element=0;
+   31   2            
+   32   2            
+   33   2              cir_flag = 1;//»´æ÷±Íº«‘≤ª∑ 
+   34   2              encoder_sign=1;//±‡¬Î∆˜
+   35   2            
+   36   2              yuansu_flag=2;
+   37   2            
+   38   2      
+   39   2      
+   40   2          }
+   41   1          //»Îª∑
+   42   1          else if ((cir_flag == 1)) 
+   43   1          {
+   44   2              cir_flag=2;
+   45   2              gyro_roll_sign_rign=1;//Õ”¬›“«ø™ ºª˝∑÷
+   46   2            
+   47   2              if (R_raw > L_raw && cir_angle_flag != 2)
+   48   2              {
+   49   3                  cir_angle_flag = 1;//◊Û»Îª∑         
+   50   3              
+   51   3              }
+   52   2              else if (L_raw >R_raw && cir_angle_flag != 1)
+   53   2              {
+   54   3                  cir_angle_flag = 2;//”“»Îª∑
+C251 COMPILER V5.60.0,  element                                                            08/06/25  09:20:12  PAGE 2   
+
+   55   3      
+   56   3              }
+   57   2      
+   58   2      
+   59   2          }
+   60   1            //‘≤ª∑ƒ⁄
+   61   1            else if( (cir_flag==2) && (L>80&&R>80&&LM>80&&RM>80&&MID>80) && cir_angle_flag && (mot_inc_element>=0.
+             -4) )
+   62   1            {
+   63   2                  cir_flag=3;
+   64   2                  encoder_sign = 0;                        // ±‡¬Î∆˜ø…ƒ‹”√”⁄≤ªÕ¨ƒøµƒªÚπÿ±’
+   65   2                  change_speed_Target_base(280);
+   66   2                  //£°£°£°£°£°
+   67   2            
+   68   2      
+   69   2            }
+   70   1          
+   71   1            //◊º±∏≥ˆª∑
+   72   1            else if((cir_flag==3)&& fabs(gyro_roll) > 240.0f)
+   73   1            {
+   74   2              cir_flag=4;
+   75   2      
+   76   2                      
+   77   2            }
+   78   1              
+   79   1            //≥ˆª∑
+   80   1            else if(cir_flag==4&&( fabs(gyro_roll) > 280.0f))
+   81   1            {
+   82   2              cir_flag=5;
+   83   2              encoder_sign=1;
+   84   2            }
+   85   1            //≥ˆª∑≥…π¶
+   86   1            else if((cir_flag==5)&&( fabs(gyro_roll) > 250.0f)&&(mot_inc_element>0.3))
+   87   1            {
+   88   2              cir_flag=6;
+   89   2            }
+   90   1            
+   91   1            else if((cir_flag==6)&&(mot_inc_element>1.2))
+   92   1            {
+   93   2              
+   94   2              if(temp_flag<100)
+   95   2              {
+   96   3                  change_speed_Target_base(240);
+   97   3                //£°£°£°£°£°
+   98   3                
+   99   3              }
+  100   2              else if (temp_flag>= 100 && temp_flag<415){
+  101   3      //            change_speed_Target_base(220);  // «–ªª◊¥Ã¨ ±…Ë÷√ƒø±ÍÀŸ∂»
+  102   3                  //£°£°£°£°£°
+  103   3      //          
+  104   3                  L_pid.Target_base=calculate_dynamic_target_speed_quadratic(MID);
+  105   3                  R_pid.Target_base=calculate_dynamic_target_speed_quadratic(MID);
+  106   3                
+  107   3              }
+  108   2              else if(temp_flag>=415)
+  109   2              {
+  110   3                
+  111   3                temp_flag=0;
+  112   3                cir_flag=0;
+  113   3              
+  114   3                yuansu_flag=1; 
+  115   3                
+  116   3                gyro_roll_sign_rign=0;
+  117   3                encoder_sign=0;
+  118   3                mot_inc_element=0;
+  119   3                gyro_roll=0;
+C251 COMPILER V5.60.0,  element                                                            08/06/25  09:20:12  PAGE 3   
+
+  120   3                time_speedup_sign=1;
+  121   3                change_speed_Target_base(220);
+  122   3                //£°£°£°£°£°
+  123   3              }
+  124   2              
+  125   2            }
+  126   1            
+  127   1      
+  128   1      
+  129   1      }
+  130          
+  131          
+  132          
+  133          
+  134          
+  135          
+  136          
+  137          
+  138          
+  139          //........‘≤ª∑¥¶¿Ì...........//
+  140          void cricle_cl(void)
+  141          {
+  142   1      
+  143   1          //ª∑ƒ⁄◊™»¶£¨∑«–¥À¿
+  144   1        if(cir_flag==3)
+  145   1        {
+  146   2          
+  147   2            if (cir_angle_flag == 1) {
+  148   3                Turn_PID.err=-0.98;
+  149   3            } else if(cir_angle_flag == 2) {
+  150   3                Turn_PID.err=0.98;
+  151   3            }
+  152   2          
+  153   2        }
+  154   1        //≥ˆª∑
+  155   1        if((cir_flag==6)||(cir_flag==5))
+  156   1        {
+  157   2          
+  158   2          Turn_PID.err=error;
+  159   2        
+  160   2        }
+  161   1        
+  162   1      }
+  163          
+  164          
+  165          int cross_flag=0;
+  166          void cross_judge(void)
+  167          {
+  168   1        switch(cross_flag)
+  169   1        {
+  170   2          case 0:
+  171   2            if(LM>70&&RM>70)
+  172   2            {
+  173   3              P52=1;
+  174   3              cross_flag=1;
+  175   3            }
+  176   2            break;
+  177   2          
+  178   2          case 1:
+  179   2            if(LM<70&&RM<70)
+  180   2            {
+  181   3              P52=0;
+  182   3              cross_flag=2;
+  183   3              gyro_roll_sign_cross=1;
+  184   3            }
+  185   2            break;
+C251 COMPILER V5.60.0,  element                                                            08/06/25  09:20:12  PAGE 4   
+
+  186   2          case 2://‘⁄ Æ◊÷¿Ô
+  187   2            if(LM>70&&RM>70)
+  188   2            {
+  189   3              P52=1;
+  190   3              cross_flag=3;
+  191   3              gyro_roll_sign_cross=0;
+  192   3            }
+  193   2            break;
+  194   2          case 3:
+  195   2            if(LM<70&&RM<70)
+  196   2            {
+  197   3              P52=0;
+  198   3              cross_flag=0;
+  199   3            }
+  200   2            break;
+  201   2          
+  202   2        }
+  203   1      }
+  204          
+  205          void cross_proc(void)
+  206          {
+  207   1        static char cross_handle_state = 0;
+  208   1        if(cross_flag==2)
+  209   1        {
+  210   2          
+  211   2      //    if(gyro_roll_cross<=240) Turn_PID.err=2;
+  212   2          if(gyro_roll_cross<-140&&gyro_roll_cross>-175) 
+  213   2          {
+  214   3            error=1;
+  215   3          }
+  216   2          
+  217   2      
+  218   2            
+  219   2      //    switch(cross_handle_state)
+  220   2      //    {
+  221   2      //      case 0:
+  222   2      //        encoder_cross_sign=1;
+  223   2      //        if(encoder_cross_element>0.5)
+  224   2      //        {
+  225   2      //          cross_handle_state=1;
+  226   2      //          encoder_cross_sign=0;
+  227   2      //        }
+  228   2      //        break;
+  229   2      //      
+  230   2      //      case 1:
+  231   2      //        break;
+  232   2      //      
+  233   2      //      case 2:
+  234   2      //        break;
+  235   2      //      
+  236   2      //      case 3:
+  237   2      //        break;
+  238   2      //    }
+  239   2          
+  240   2      
+  241   2        }
+  242   1        
+  243   1      }
+  244          
+  245          
+  246          
+  247          
+  248          
+  249              /*********************º”ÀŸ*********************//*********************º”ÀŸ*********************//******
+             -***************º”ÀŸ*********************/  
+  250          void speed_up(){
+C251 COMPILER V5.60.0,  element                                                            08/06/25  09:20:12  PAGE 5   
+
+  251   1        
+  252   1      
+  253   1      
+  254   1      
+  255   1      
+  256   1      
+  257   1      
+  258   1      
+  259   1      
+  260   1      
+  261   1      
+  262   1      
+  263   1      }
+  264            
+  265          
+  266          /*********************pid«–ªª*********************//*********************pid«–ªª*********************//**
+             -*******************pid«–ªª*********************/ 
+  267          
+  268          float run_mode=1;
+  269          
+  270          char set_control_mode(char mode){
+  271   1          if(mode==1){
+  272   2          L_pid.kp=10.9;
+  273   2          L_pid.ki=0.65;
+  274   2          L_pid.kd=0;
+  275   2           
+  276   2          R_pid.kp=10.9;
+  277   2          R_pid.ki=0.65;
+  278   2          R_pid.kd=0;
+  279   2          
+  280   2          //  error = (left_mag - right_mag) / (left_mag + right_mag);
+  281   2          Turn_PID.kp=144;
+  282   2          Turn_PID.ki=76.1;
+  283   2          Turn_PID.kd=56;
+  284   2          Turn_PID.kp1=0.54;
+  285   2        
+  286   2      
+  287   2          return 1;
+  288   2          }
+  289   1          
+  290   1          else if(mode==2){
+  291   2          L_pid.kp=4.9;
+  292   2          L_pid.ki=0.2;
+  293   2          L_pid.kd=0;
+  294   2           
+  295   2          R_pid.kp=4.9;
+  296   2          R_pid.ki=0.2;
+  297   2          R_pid.kd=0;
+  298   2      
+  299   2          Turn_PID.kp=144;
+  300   2          Turn_PID.ki=66.1;
+  301   2          Turn_PID.kd=66;
+  302   2          Turn_PID.kp1=0.34;
+  303   2            
+  304   2          dir_loop_limit=46; 
+  305   2          dir_enlarge=15.5;  
+  306   2          
+  307   2            
+  308   2          
+  309   2            return 2;
+  310   2          }
+  311   1          
+  312   1          return 0;
+  313   1      
+  314   1      
+  315   1      }
+C251 COMPILER V5.60.0,  element                                                            08/06/25  09:20:12  PAGE 6   
+
+  316          
+  317          /*********************∆≈‹ºÏ≤‚*********************//*********************∆≈‹ºÏ≤‚*********************//
+             -*********************∆≈‹ºÏ≤‚*********************/  
+  318          
+  319          
+  320          volatile unsigned char hall_triggered = 0;     //  «∑Ò’˝‘⁄À¯∂®£¨0 ±Ì æø…“‘ºÏ≤‚
+  321          volatile unsigned int hall_timer_count = 0;    // 5msº∆ ±∆˜º∆ ˝£¨”√”⁄—” ±1s
+  322          volatile unsigned int hall_count = 0;          // ªÙ∂˚ø™πÿ¥•∑¢¥Œ ˝
+  323          
+  324          
+  325          
+  326          void check_hall_sensor(void)
+  327          {
+  328   1          if (hall_triggered == 0)
+  329   1          {
+  330   2              // ºŸ…Ë P36 == 0 ±Ì æªÙ∂˚ø™πÿ±’∫œ£®±ª¥≈Ã˙¥•∑¢£©
+  331   2              if (P36 == 0)
+  332   2              {
+  333   3                  hall_count++;               // º«¬º“ª¥Œ¥•∑¢
+  334   3                  hall_triggered = 1;         // ø™ º1√Î¿‰»¥
+  335   3                  hall_timer_count = 0;       // ÷ÿ÷√º∆ ˝∆˜
+  336   3                
+  337   3              }
+  338   2          }
+  339   1          else
+  340   1          {
+  341   2              hall_timer_count++;             // √ø¥Œ÷–∂œ+1£¨5ms“ª¥Œ
+  342   2      
+  343   2              if (hall_timer_count >= 200)    // 1√Î = 200 * 5ms
+  344   2              {
+  345   3                  hall_triggered = 0;         // Ω‚À¯£¨‘ –Ì‘Ÿ¥ŒºÏ≤‚
+  346   3                  hall_timer_count = 0;       // ÷ÿ÷√
+  347   3              }
+  348   2              
+  349   2          }
+  350   1      
+  351   1      
+  352   1          
+  353   1      }
+  354          
+  355          
+  356          
+  357          
+
+
+Module Information          Static   Overlayable
+------------------------------------------------
+  code size            =      1355     ------
+  ecode size           =    ------     ------
+  data size            =    ------     ------
+  idata size           =    ------     ------
+  pdata size           =    ------     ------
+  xdata size           =    ------     ------
+  xdata-const size     =    ------     ------
+  edata size           =        32     ------
+  bit size             =    ------     ------
+  ebit size            =    ------     ------
+  bitaddressable size  =    ------     ------
+  ebitaddressable size =    ------     ------
+  far data size        =    ------     ------
+  huge data size       =    ------     ------
+  const size           =    ------     ------
+  hconst size          =        93     ------
+End of Module Information.
+
+
+C251 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
