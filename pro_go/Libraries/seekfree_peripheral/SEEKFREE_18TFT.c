@@ -1141,3 +1141,66 @@ void showimage(const unsigned char *p)
 		 }
 	}		
 }
+
+
+
+/**
+ * @brief      显示任意尺寸的单色点阵字体 (阳码)
+ * @param      x             左上角x坐标
+ * @param      y             左上角y坐标
+ * @param      width         字体的像素宽度
+ * @param      height        字体的像素高度
+ * @param      font_data     指向点阵数据数组的指针
+ * @param      font_color    字体颜色
+ * @param      bg_color      背景颜色
+ */
+void lcd_show_font(unsigned short x, unsigned short y, unsigned char width, unsigned char height, const unsigned char *font_data, unsigned short font_color, unsigned short bg_color)
+{
+    /* C89 标准下，所有变量必须在函数体的最开始处声明 */
+    unsigned char i, j, k;
+    unsigned char byte_data;
+    unsigned short bytes_per_row;
+
+    /* 1. 计算每行数据所占的字节数 */
+    bytes_per_row = (width + 7) / 8;
+
+    /* 2. 外层循环，逐行绘制 */
+    for (i = 0; i < height; i++)
+    {
+        /* 3. 设置当前要绘制的单行区域 */
+        lcd_set_region(x, y + i, x + width - 1, y + i);
+
+        /* 4. 中层循环，处理这一行所有的字节 */
+        for (j = 0; j < bytes_per_row; j++)
+        {
+            /* 5. 读取当前字节的数据 */
+            byte_data = font_data[i * bytes_per_row + j];
+
+            /* 6. 内层循环，处理这个字节里的8个像素点 */
+            for (k = 0; k < 8; k++)
+            {
+                /* 如果宽度不是8的倍数，最后几位可能不需要绘制 */
+                if ((j * 8 + k) < width)
+                {
+                    /* 检查最高位，判断是画点还是画背景 */
+                    if (byte_data & 0x80)
+                    {
+                        lcd_writedata_16bit(font_color);
+                    }
+                    else
+                    {
+                        lcd_writedata_16bit(bg_color);
+                    }
+                }
+                byte_data <<= 1; /* 左移一位，准备处理下一位 */
+            }
+        }
+    }
+}
+
+
+
+
+
+
+

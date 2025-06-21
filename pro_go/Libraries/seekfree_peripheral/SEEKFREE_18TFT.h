@@ -149,6 +149,10 @@ void lcd_showuint16(uint16 x,uint16 y,uint16 dat);
 void lcd_showint32(uint16 x,uint16 y,int32 dat,uint8 num);
 void lcd_showfloat(uint16 x,uint16 y,double dat,uint8 num,uint8 pointnum);
 void showimage(const unsigned char *p);
-
+void lcd_show_font(unsigned short x, unsigned short y, unsigned char width, unsigned char height, const unsigned char *font_data, unsigned short font_color, unsigned short bg_color);
 
 #endif
+
+
+
+

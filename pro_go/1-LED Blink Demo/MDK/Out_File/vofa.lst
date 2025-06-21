@@ -1,4 +1,4 @@
-C251 COMPILER V5.60.0,  vofa                                                               06/06/25  17:43:24  PAGE 1   
+C251 COMPILER V5.60.0,  vofa                                                               21/06/25  16:41:54  PAGE 1   
 
 
 C251 COMPILER V5.60.0, COMPILATION OF MODULE vofa
@@ -66,7 +66,7 @@ stmt  level    source
    50          
    51          uint8 RxBuffer[1];//串口接收缓冲
    52          uint16 RxLine = 0;//指令长度
-C251 COMPILER V5.60.0,  vofa                                                               06/06/25  17:43:24  PAGE 2   
+C251 COMPILER V5.60.0,  vofa                                                               21/06/25  16:41:54  PAGE 2   
 
    53          uint8 DataBuff[200];//指令内容
    54          float data_Get=0;//接收缓冲区
@@ -129,15 +129,13 @@ stmt  level    source
   109          {
   110   1           data_Get = Get_Data(); // 存放接收到的数据
   111   1        
-  112   1      //    printf("data=%.2f\r\n",data_Get);
-  113   1      //    if(mode == 1)//循迹环
-  114   1      //    {
-  115   1        
-  116   1              #if 0
-C251 COMPILER V5.60.0,  vofa                                                               06/06/25  17:43:24  PAGE 3   
-
+  112   1      
+  113   1        
+  114   1              #if 0
                            if(DataBuff[0]=='P' && DataBuff[1]=='2') // 速度环P
                            Turn_PID.kp = data_Get;
+C251 COMPILER V5.60.0,  vofa                                                               21/06/25  16:41:54  PAGE 3   
+
                            else if(DataBuff[0]=='I' && DataBuff[1]=='2') // 速度环I
                            Turn_PID.ki = data_Get;
                            else if(DataBuff[0]=='D' && DataBuff[1]=='2') // 速度环D
@@ -151,23 +149,23 @@ stmt  level    source
                                Turn_PID.kp1 = data_Get;
                
                        #endif
-  132   1        
-  133   1              #if 1
-  134   1              if(DataBuff[0]=='P' && DataBuff[1]=='2') // 速度环P
-  135   1                  R_pid.kp = data_Get;
-  136   1              else if(DataBuff[0]=='I' && DataBuff[1]=='2') // 速度环I
-  137   1                  R_pid.ki = data_Get;
-  138   1              else if(DataBuff[0]=='D' && DataBuff[1]=='2') // 速度环D
-  139   1                  R_pid.kd = data_Get;
-  140   1              else if((DataBuff[0]=='S' && DataBuff[1]=='p') && DataBuff[2]=='e') //目标速度
-  141   1                  R_pid.Target = data_Get;
-  142   1              
-  143   1              
-  144   1      //            r_target_speed = data_Get;
-  145   1      
-  146   1              #endif
-  147   1              
-  148   1              #if 0
+  130   1        
+  131   1              #if 0
+                       if(DataBuff[0]=='P' && DataBuff[1]=='2') // 速度环P
+                           R_pid.kp = data_Get;
+                       else if(DataBuff[0]=='I' && DataBuff[1]=='2') // 速度环I
+                           R_pid.ki = data_Get;
+                       else if(DataBuff[0]=='D' && DataBuff[1]=='2') // 速度环D
+                           R_pid.kd = data_Get;
+                       else if((DataBuff[0]=='S' && DataBuff[1]=='p') && DataBuff[2]=='e') //目标速度
+                           R_pid.Target = data_Get;
+                       
+                       
+               //            r_target_speed = data_Get;
+               
+                       #endif
+  145   1              
+  146   1              #if 0
                        if(DataBuff[0]=='P' && DataBuff[1]=='2') // 速度环P
                            ang_pid.kp = data_Get;
                        else if(DataBuff[0]=='I' && DataBuff[1]=='2') // 速度环I
@@ -180,9 +178,9 @@ stmt  level    source
                            pwm_state = data_Get;
                
                        #endif
-  161   1      
-  162   1              
-  163   1                #if 0
+  159   1      
+  160   1              
+  161   1                #if 0
                        if(DataBuff[0]=='P' && DataBuff[1]=='2') // 速度环P
                           LEFT_WEIGHT = data_Get;
                        else if(DataBuff[0]=='I' && DataBuff[1]=='2') // 速度环I
@@ -190,21 +188,47 @@ stmt  level    source
                
                
                        #endif
+  169   1              
+  170   1              
   171   1              
-  172   1      }
-  173          
+  172   1              
+  173   1              #if 1
+  174   1                  if(DataBuff[0]=='P' && DataBuff[1]=='2') // 速度环P
+  175   1                  Gyro_PID.kp = data_Get;
+  176   1                  else if(DataBuff[0]=='I' && DataBuff[1]=='2') // 速度环I
+  177   1                  Gyro_PID.ki = data_Get;
+  178   1                  else if(DataBuff[0]=='D' && DataBuff[1]=='2') // 速度环D
+  179   1                  Gyro_PID.kd = data_Get;
+  180   1                  else if((DataBuff[0]=='p' && DataBuff[1]=='t'))
+  181   1                  Gyro_PID.kp1 = data_Get;
+  182   1      
+C251 COMPILER V5.60.0,  vofa                                                               21/06/25  16:41:54  PAGE 4   
+
+  183   1              #endif
+  184   1              
+  185   1              
+  186   1              
+  187   1              
+  188   1              
+  189   1              
+  190   1              
+  191   1              
+  192   1              
+  193   1              
+  194   1              
+  195   1              
+  196   1      }
+  197          
 
 
 Module Information          Static   Overlayable
 ------------------------------------------------
-  code size            =      1059     ------
+  code size            =      1050     ------
   ecode size           =    ------     ------
   data size            =    ------     ------
   idata size           =    ------     ------
   pdata size           =    ------     ------
   xdata size           =    ------     ------
-C251 COMPILER V5.60.0,  vofa                                                               06/06/25  17:43:24  PAGE 4   
-
   xdata-const size     =    ------     ------
   edata size           =      1263     ------
   bit size             =    ------     ------

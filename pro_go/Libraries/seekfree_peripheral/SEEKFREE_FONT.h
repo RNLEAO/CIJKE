@@ -24,12 +24,14 @@
 #include "common.h"
 
 
-
+extern const unsigned char Hua_32x32[];
+extern const unsigned char Tang_32x32[];
+extern const unsigned char Wei_32x32[];
+extern const unsigned char Mian_32x32[];
 
 extern const uint8 code tft_ascii[95][16];
 extern const uint8 code oled_8x16[];
 extern const uint8 code oled_6x8[][6];
-
 //-------常用颜色----------
 #define RED     	0XF800    //红色
 #define GREEN   	0X07E0    //绿色

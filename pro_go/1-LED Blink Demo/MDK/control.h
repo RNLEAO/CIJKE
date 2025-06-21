@@ -38,7 +38,7 @@ extern int state ;  		   // 状态标志，指示是否已经计算完偏移量
 
 // 零偏值
 
-extern float gyro_data[3];  // 陀螺仪数据
+extern float gyro_data[1];  // 陀螺仪数据
 
 extern float gyro_roll,gyro_pitch;
 extern float roll_accel,pitch_accel;
@@ -82,7 +82,7 @@ float filter(float value);
 void key_scan_cycle_pwm_state(void); // 返回类型改为 void
 float limit_range(float input, float limit);
 
-void change_speed(int speed);
+
 /**************************************************************************
 函数功能：外设及pid初始化
 入口参数：无
@@ -108,22 +108,23 @@ float limit_float(float value, float min_limit, float max_limit);
 float normalize_float(float value, float min, float max);
 //速度
 float calculate_dynamic_target_speed_quadratic(float current_mid_value);
-typedef enum {
-    RGB_COLOR_OFF = 0,        // 无: P26=0, P74=0, P07=0
-    RGB_COLOR_WHITE = 1,      // 白: P26=0, P74=0, P07=1
-    RGB_COLOR_CYAN = 2,       // 青: P26=0, P74=1, P07=0
-    RGB_COLOR_YELLOW_GREEN = 3, // 黄绿: P26=1, P74=0, P07=0
-    RGB_COLOR_MAGENTA = 4,    // 紫: P26=0, P74=1, P07=1
-    RGB_COLOR_GREEN = 5,      // 绿: P26=1, P74=1, P07=0
-    RGB_COLOR_RED = 6,        // 红: P26=1, P74=0, P07=1
-    RGB_COLOR_BLUE = 7        // 蓝: P26=1, P74=1, P07=1
-} RgbColorCode_t;
 
-void set_rgb_pins(int p26_val, int p74_val, int p07_val);
+//typedef enum {
+//	RGB_COLOR_OFF = 0,        // 无: P26=0, P74=0, P07=0
+//	RGB_COLOR_WHITE = 1,      // 白: P26=0, P74=0, P07=1
+//	RGB_COLOR_CYAN = 2,       // 青: P26=0, P74=1, P07=0
+//	RGB_COLOR_YELLOW_GREEN = 3, // 黄绿: P26=1, P74=0, P07=0
+//	RGB_COLOR_MAGENTA = 4,    // 紫: P26=0, P74=1, P07=1
+//	RGB_COLOR_GREEN = 5,      // 绿: P26=1, P74=1, P07=0
+//	RGB_COLOR_RED = 6,        // 红: P26=1, P74=0, P07=1
+//	RGB_COLOR_BLUE = 7        // 蓝: P26=1, P74=1, P07=1
+//} RgbColorCode_t;
 
-void control_rgb_led_conditional(float check_value, float abs_threshold, RgbColorCode_t feedback_color, int enable_state);
+//void set_rgb_pins(int p26_val, int p74_val, int p07_val);
 
-void control_rgb_led( RgbColorCode_t feedback_color);
+//void control_rgb_led_conditional(float check_value, float abs_threshold, RgbColorCode_t feedback_color, int enable_state);
+
+//void control_rgb_led( RgbColorCode_t feedback_color);
 
 void update_encoder_speedup_value(float* p_encoder_speedup_element, 
                                   int current_encoder_speedup_sign);
@@ -133,7 +134,6 @@ void update_gyro_angle_accumulator(float* p_angle_accumulator,
 
 void change_speed_Target(int speed);
 void change_speed_Target_base(int speed);
-void change_para();
 ////卡尔曼
 //void kalanma_data();
 //void init_kalman();

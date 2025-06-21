@@ -8,7 +8,7 @@ int state = 0;  		   // 状态标志，指示是否已经计算完偏移量
 
 
 // 转化，去零漂后的物理量
-float gyro_data[3] = {0.0f, 0.0f, 0.0f};  // 陀螺仪数据
+float gyro_data[1] = {0.0f};  // 陀螺仪数据
 
 //互补滤波计算角度值
 float roll_accel=0,pitch_accel=0;
@@ -75,7 +75,7 @@ void init(void)
 		gpio_mode(P2_6,GPO_PP);
 		gpio_mode(P7_4,GPO_PP);
 		gpio_mode(P0_7,GPO_PP);
-		gpio_mode(P5_2,GPO_PP);
+		gpio_mode(P5_2,GPO_PP);		
 
 
 }
@@ -217,79 +217,6 @@ float LimitAngle(float *angle)
 }
 
 
-
-
-
-//-------------------------------------------------------------------------------------------------------------------
-//  @brief      4082驱动测试电机
-//  @param      输入电机通道 ，延时时间
-//  @return           
-//-------------------------------------------------------------------------------------------------------------------
-void motor_rotate_and_reverse(int pwm_channel_forward, int pwm_channel_reverse, int rotate_time, int reverse_time, int pwm_duty_max) {
-  int duty = 0;
-
-  // 正向转动
-  for (duty = 0; duty <= pwm_duty_max; duty += 100) {
-    pwm_duty(pwm_channel_forward, duty);
-    pwm_duty(pwm_channel_reverse, 0); // 固定反向通道为0
-    delay_ms(rotate_time / (pwm_duty_max / 100 + 1)); // 根据rotate_time计算延时
-  }
-
-  // 停止
-  pwm_duty(pwm_channel_forward, 0);
-  pwm_duty(pwm_channel_reverse, 0);
-  delay_ms(500); // 停止0.5秒
-
-  // 反向转动
-  for (duty = 0; duty <= pwm_duty_max; duty += 100) {
-    pwm_duty(pwm_channel_forward, 0); // 固定正向通道为0
-    pwm_duty(pwm_channel_reverse, duty);
-    delay_ms(reverse_time / (pwm_duty_max / 100 + 1)); // 根据reverse_time计算延时
-  }
-
-  // 停止
-  pwm_duty(pwm_channel_forward, 0);
-  pwm_duty(pwm_channel_reverse, 0);
-}
-
-
-
-
-
-
-
-/**
- * @brief 设置左右电机的目标速度
- *
- * 该函数用于分别设置左电机和右电机的目标速度，以便 PID 控制器进行速度控制。
- *
- * @param L_speed 左电机的目标速度值
- * @param R_speed 右电机的目标速度值
- *
- * @note
- * - 该函数会更新全局变量 `L_pid.Target` 和 `R_pid.Target`，分别用于左电机和右电机的 PID 控制。
- * - `L_speed` 和 `R_speed` 的值应该在电机速度的有效范围内。
- */
-void change_speed(int speed) {
-	
-		#if 0
-    ang_pid.Target = speed; // 设置左电机的目标速度
-		#endif
-	
-		#if 0
-    L_pid.Target = speed; // 设置左电机的目标速度
-    R_pid.Target = speed;
-		#endif
-	
-		#if 1
-
-		L_pid.Target_base = speed; // 设置左电机的目标速度
-		R_pid.Target_base = speed;
-		#endif
-}
-
- 
-
 void change_speed_Target(int speed) {
     L_pid.Target = speed; // 设置左电机的目标速度
     R_pid.Target = speed;
@@ -307,18 +234,6 @@ void change_speed_Target_base(int speed) {
 
 
 
-
-// 偏差滑动平均滤波
-float filter(float value) 
-{
-    static float filter_buf[3] = {0};
-
-	filter_buf[2] = filter_buf[1];
-	filter_buf[1] = filter_buf[0];
-	filter_buf[0] = value;
-
-	return (filter_buf[2] + filter_buf[1] + filter_buf[0]) / 3.0f;
-}
 
 
 
@@ -469,7 +384,7 @@ void buzzer_control_with_enable(float check_value, float abs_threshold, int enab
     // 检查两个条件：
     // 1. 变量的绝对值是否达到阈值
     // 2. 蜂鸣器是否被启用 (enable_state == 1)
-		#if 0
+		#if 1
 	    if ((fabs(check_value) >= abs_threshold) && (enable_state == 1))
     {
         // 两个条件都满足，打开蜂鸣器
@@ -487,7 +402,7 @@ void buzzer_control_with_enable(float check_value, float abs_threshold, int enab
 		
 		
 		
-		#if 1
+		#if 0
 
 		if ((check_value== abs_threshold) && (enable_state == 1))
     {
@@ -615,10 +530,10 @@ float normalize_float(float value, float min, float max)
  */
 float calculate_dynamic_target_speed_quadratic(float current_mid_value) {
 		#if 1
-    const int MID_min_threshold = 15;   // 修改：原为 28
-    const int speed_at_MID_min = 100;
-    const int MID_max_threshold = 25;   // 修改：原为 60
-    const int speed_at_MID_max = 360;
+    const int MID_min_threshold = 26;   // 修改：原为 28
+    const int speed_at_MID_min = 230;
+    const int MID_max_threshold = 30;   // 修改：原为 60
+    const int speed_at_MID_max = 330;
 
     int calculated_speed;
 
@@ -644,100 +559,96 @@ float calculate_dynamic_target_speed_quadratic(float current_mid_value) {
 		#endif
 		
 		
-
-		
-		
-		
 }
 
 /*********************rgb*********************//*********************rgb*********************//*********************rgb*********************/	
 
 
 
-void set_rgb_pins(int p26_val, int p74_val, int p07_val) {
-    P26 = p26_val;
-    P74 = p74_val;
-    P07 = p07_val;
-}
+//void set_rgb_pins(int p26_val, int p74_val, int p07_val) {
+//    P26 = p26_val;
+//    P74 = p74_val;
+//    P07 = p07_val;
+//}
 
-void control_rgb_led_conditional(float check_value, float abs_threshold, RgbColorCode_t feedback_color, int enable_state) {
-    // 检查两个条件：
-    // 1. 监控值的绝对值是否达到或超过阈值
-    // 2. RGB LED 是否被启用 (enable_state == 1)
-	
-		#if 1
-    if ((fabs(check_value) >= abs_threshold) && (enable_state == 1)) {
-        switch (feedback_color) {
-            case RGB_COLOR_OFF:
-                set_rgb_pins(0, 0, 0);
-                break;
-            case RGB_COLOR_WHITE:
-                set_rgb_pins(0, 0, 1);
-                break;
-            case RGB_COLOR_CYAN:
-                set_rgb_pins(0, 1, 0);
-                break;
-            case RGB_COLOR_YELLOW_GREEN:
-                set_rgb_pins(1, 0, 0);
-                break;
-            case RGB_COLOR_MAGENTA:
-                set_rgb_pins(0, 1, 1);
-                break;
-            case RGB_COLOR_GREEN:
-                set_rgb_pins(1, 1, 0);
-                break;
-            case RGB_COLOR_RED:
-                set_rgb_pins(1, 0, 1);
-                break;
-            case RGB_COLOR_BLUE:
-                set_rgb_pins(1, 1, 1);
-                break;
-            default:
-                set_rgb_pins(0, 0, 0); // 安全起见，关闭LED
-                break;
-        }
-    } else {
-        set_rgb_pins(0, 0, 0);
-    }
-		#endif
-		
+//void control_rgb_led_conditional(float check_value, float abs_threshold, RgbColorCode_t feedback_color, int enable_state) {
+//    // 检查两个条件：
+//    // 1. 监控值的绝对值是否达到或超过阈值
+//    // 2. RGB LED 是否被启用 (enable_state == 1)
+//	
+//		#if 1
+//    if ((fabs(check_value) >= abs_threshold) && (enable_state == 1)) {
+//        switch (feedback_color) {
+//            case RGB_COLOR_OFF:
+//                set_rgb_pins(0, 0, 0);
+//                break;
+//            case RGB_COLOR_WHITE:
+//                set_rgb_pins(0, 0, 1);
+//                break;
+//            case RGB_COLOR_CYAN:
+//                set_rgb_pins(0, 1, 0);
+//                break;
+//            case RGB_COLOR_YELLOW_GREEN:
+//                set_rgb_pins(1, 0, 0);
+//                break;
+//            case RGB_COLOR_MAGENTA:
+//                set_rgb_pins(0, 1, 1);
+//                break;
+//            case RGB_COLOR_GREEN:
+//                set_rgb_pins(1, 1, 0);
+//                break;
+//            case RGB_COLOR_RED:
+//                set_rgb_pins(1, 0, 1);
+//                break;
+//            case RGB_COLOR_BLUE:
+//                set_rgb_pins(1, 1, 1);
+//                break;
+//            default:
+//                set_rgb_pins(0, 0, 0); // 安全起见，关闭LED
+//                break;
+//        }
+//    } else {
+//        set_rgb_pins(0, 0, 0);
+//    }
+//		#endif
+//		
 
-		
-}
+//		
+//}
 
-void control_rgb_led( RgbColorCode_t feedback_color) {
+//void control_rgb_led( RgbColorCode_t feedback_color) {
 
-        switch (feedback_color) {
-            case RGB_COLOR_OFF:
-                set_rgb_pins(0, 0, 0);
-                break;
-            case RGB_COLOR_WHITE:
-                set_rgb_pins(0, 0, 1);
-                break;
-            case RGB_COLOR_CYAN:
-                set_rgb_pins(0, 1, 0);
-                break;
-            case RGB_COLOR_YELLOW_GREEN:
-                set_rgb_pins(1, 0, 0);
-                break;
-            case RGB_COLOR_MAGENTA:
-                set_rgb_pins(0, 1, 1);
-                break;
-            case RGB_COLOR_GREEN:
-                set_rgb_pins(1, 1, 0);
-                break;
-            case RGB_COLOR_RED:
-                set_rgb_pins(1, 0, 1);
-                break;
-            case RGB_COLOR_BLUE:
-                set_rgb_pins(1, 1, 1);
-                break;
-            default:
-                set_rgb_pins(0, 0, 0); // 安全起见，关闭LED
-                break;
-        }
+//        switch (feedback_color) {
+//            case RGB_COLOR_OFF:
+//                set_rgb_pins(0, 0, 0);
+//                break;
+//            case RGB_COLOR_WHITE:
+//                set_rgb_pins(0, 0, 1);
+//                break;
+//            case RGB_COLOR_CYAN:
+//                set_rgb_pins(0, 1, 0);
+//                break;
+//            case RGB_COLOR_YELLOW_GREEN:
+//                set_rgb_pins(1, 0, 0);
+//                break;
+//            case RGB_COLOR_MAGENTA:
+//                set_rgb_pins(0, 1, 1);
+//                break;
+//            case RGB_COLOR_GREEN:
+//                set_rgb_pins(1, 1, 0);
+//                break;
+//            case RGB_COLOR_RED:
+//                set_rgb_pins(1, 0, 1);
+//                break;
+//            case RGB_COLOR_BLUE:
+//                set_rgb_pins(1, 1, 1);
+//                break;
+//            default:
+//                set_rgb_pins(0, 0, 0); // 安全起见，关闭LED
+//                break;
+//        }
 
-}
+//}
 
 /*********************角度环*********************//*********************角度环*********************//*********************角度环*********************/	
 /*******************************卡尔曼滤波********************************//*******************************卡尔曼滤波********************************//*******************************卡尔曼滤波********************************/
@@ -915,49 +826,6 @@ void update_gyro_angle_accumulator(float* p_angle_accumulator,
         *p_angle_accumulator = 0.0f;
     }
 }
-
-void change_para(){
-	
-		if(run_mode==1){
-		L_pid.kp=10.9;
-		L_pid.ki=0.65;
-		L_pid.kd=0;
-		 
-		R_pid.kp=10.9;
-		R_pid.ki=0.65;
-		R_pid.kd=0;
-		
-		//	error = (left_mag - right_mag) / (left_mag + right_mag);
-		Turn_PID.kp=144;
-		Turn_PID.ki=76.1;
-		Turn_PID.kd=56;
-		Turn_PID.kp1=0.54;
-		dir_loop_limit=120; 
-		}
-		
-		else if(run_mode==2){
-		L_pid.kp=4.9;
-		L_pid.ki=0.2;
-		L_pid.kd=0;
-		 
-		R_pid.kp=4.9;
-		R_pid.ki=0.2;
-		R_pid.kd=0;
-
-		Turn_PID.kp=194;
-		Turn_PID.ki=66.1;
-		Turn_PID.kd=66;
-		Turn_PID.kp1=0.34;
-			
-		dir_loop_limit=48; 
-		dir_enlarge=15.5;  
-		
-		}
-
-
-
-}
-
 
 
 

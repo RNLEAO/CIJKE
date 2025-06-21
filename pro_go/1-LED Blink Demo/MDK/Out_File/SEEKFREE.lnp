@@ -26,7 +26,7 @@
 ".\Out_File\PID.obj",
 ".\Out_File\vofa.obj",
 ".\Out_File\element.obj",
-".\Out_File\Dma.obj",
+".\Out_File\out_control.obj",
 ".\Out_File\seekfree_assistant.obj",
 ".\Out_File\seekfree_assistant_inface.obj" 
 TO ".\Out_File\SEEKFREE" 

@@ -1,4 +1,4 @@
-C251 COMPILER V5.60.0,  control                                                            08/06/25  09:32:11  PAGE 1   
+C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 1   
 
 
 C251 COMPILER V5.60.0, COMPILATION OF MODULE control
@@ -20,7 +20,7 @@ stmt  level    source
     8          
     9          
    10          // 转化，去零漂后的物理量
-   11          float gyro_data[3] = {0.0f, 0.0f, 0.0f};  // 陀螺仪数据
+   11          float gyro_data[1] = {0.0f};  // 陀螺仪数据
    12          
    13          //互补滤波计算角度值
    14          float roll_accel=0,pitch_accel=0;
@@ -66,7 +66,7 @@ stmt  level    source
    54   1      
    55   1          adc_init(ADC_P00, ADC_SYSclk_DIV_2);  
    56   1          adc_init(ADC_P01, ADC_SYSclk_DIV_2);  
-C251 COMPILER V5.60.0,  control                                                            08/06/25  09:32:11  PAGE 2   
+C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 2   
 
    57   1          adc_init(ADC_P10, ADC_SYSclk_DIV_2);    
    58   1          adc_init(ADC_P05, ADC_SYSclk_DIV_2);    
@@ -89,7 +89,7 @@ stmt  level    source
    75   1          gpio_mode(P2_6,GPO_PP);
    76   1          gpio_mode(P7_4,GPO_PP);
    77   1          gpio_mode(P0_7,GPO_PP);
-   78   1          gpio_mode(P5_2,GPO_PP);
+   78   1          gpio_mode(P5_2,GPO_PP);   
    79   1      
    80   1      
    81   1      }
@@ -134,7 +134,7 @@ stmt  level    source
   120          **************************************************************************/
   121          uint8 current_key=0;
   122          uint8 last_key_state =0;
-C251 COMPILER V5.60.0,  control                                                            08/06/25  09:32:11  PAGE 3   
+C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 3   
 
   123          uint8 pwm_state = 0;      // 当前输出状态
   124          char pwm_state_charge = 0;      // 当前输出状态
@@ -202,7 +202,7 @@ stmt  level    source
   185   2              *parameter += step; // 按键 1：增加参数值
   186   2          } else if (key_value == 5) {
   187   2              *parameter -= step; // 按键 2：减少参数值
-C251 COMPILER V5.60.0,  control                                                            08/06/25  09:32:11  PAGE 4   
+C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 4   
 
   188   2               // 对于浮点数，通常不需要像 uint16_t 那样进行下限判断，因为 float 可以表示负数
   189   2               // 您可以根据具体需求添加下限或上限判断
@@ -236,148 +236,58 @@ stmt  level    source
   217   1      }
   218          
   219          
-  220          
-  221          
-  222          
-  223          //-------------------------------------------------------------------------------------------------------
-             -------------
-  224          //  @brief      4082驱动测试电机
-  225          //  @param      输入电机通道 ，延时时间
-  226          //  @return           
-  227          //-------------------------------------------------------------------------------------------------------
-             -------------
-  228          void motor_rotate_and_reverse(int pwm_channel_forward, int pwm_channel_reverse, int rotate_time, int reve
-             -rse_time, int pwm_duty_max) {
-  229   1        int duty = 0;
-  230   1      
-  231   1        // 正向转动
-  232   1        for (duty = 0; duty <= pwm_duty_max; duty += 100) {
-  233   2          pwm_duty(pwm_channel_forward, duty);
-  234   2          pwm_duty(pwm_channel_reverse, 0); // 固定反向通道为0
-  235   2          delay_ms(rotate_time / (pwm_duty_max / 100 + 1)); // 根据rotate_time计算延时
-  236   2        }
-  237   1      
-  238   1        // 停止
-  239   1        pwm_duty(pwm_channel_forward, 0);
-  240   1        pwm_duty(pwm_channel_reverse, 0);
-  241   1        delay_ms(500); // 停止0.5秒
-  242   1      
-  243   1        // 反向转动
-  244   1        for (duty = 0; duty <= pwm_duty_max; duty += 100) {
-  245   2          pwm_duty(pwm_channel_forward, 0); // 固定正向通道为0
-  246   2          pwm_duty(pwm_channel_reverse, duty);
-  247   2          delay_ms(reverse_time / (pwm_duty_max / 100 + 1)); // 根据reverse_time计算延时
-  248   2        }
-  249   1      
-  250   1        // 停止
-C251 COMPILER V5.60.0,  control                                                            08/06/25  09:32:11  PAGE 5   
+  220          void change_speed_Target(int speed) {
+  221   1          L_pid.Target = speed; // 设置左电机的目标速度
+  222   1          R_pid.Target = speed;
+  223   1      }
+  224          
+  225          
+  226          void change_speed_Target_base(int speed) {
+  227   1          L_pid.Target_base = speed; // 设置左电机的目标速度
+  228   1          R_pid.Target_base = speed;
+  229   1      }
+  230          
+  231          
+  232          
+  233          
+  234          
+  235          
+  236          
+  237          
+  238          
+  239          
+  240          
+  241          float limit_range(float input, float limit)
+  242          {
+  243   1          if (input > limit)
+  244   1              return limit;
+  245   1          else if (input < -limit)
+  246   1              return -limit;
+  247   1          else
+  248   1              return input;
+  249   1      }
+  250          
+  251          
+  252          
+  253          /**
+C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 5   
 
-  251   1        pwm_duty(pwm_channel_forward, 0);
-  252   1        pwm_duty(pwm_channel_reverse, 0);
-  253   1      }
-  254          
-  255          
-  256          
-  257          
-  258          
-  259          
-  260          
-  261          /**
-  262           * @brief 设置左右电机的目标速度
-  263           *
-  264           * 该函数用于分别设置左电机和右电机的目标速度，以便 PID 控制器进行速度控制。
-  265           *
-  266           * @param L_speed 左电机的目标速度值
-  267           * @param R_speed 右电机的目标速度值
-  268           *
-  269           * @note
-  270           * - 该函数会更新全局变量 `L_pid.Target` 和 `R_pid.Target`，分别用于左电机和右电机的 PID 控制。
-  271           * - `L_speed` 和 `R_speed` 的值应该在电机速度的有效范围内。
-  272           */
-  273          void change_speed(int speed) {
-  274   1        
-  275   1          #if 0
-                   ang_pid.Target = speed; // 设置左电机的目标速度
-                   #endif
-  278   1        
-  279   1          #if 0
-                   L_pid.Target = speed; // 设置左电机的目标速度
-                   R_pid.Target = speed;
-                   #endif
-  283   1        
-  284   1          #if 1
-  285   1      
-  286   1          L_pid.Target_base = speed; // 设置左电机的目标速度
-  287   1          R_pid.Target_base = speed;
-  288   1          #endif
-  289   1      }
-  290          
-  291           
-  292          
-  293          void change_speed_Target(int speed) {
-  294   1          L_pid.Target = speed; // 设置左电机的目标速度
-  295   1          R_pid.Target = speed;
-  296   1      }
-  297          
-  298          
-  299          void change_speed_Target_base(int speed) {
-  300   1          L_pid.Target_base = speed; // 设置左电机的目标速度
-  301   1          R_pid.Target_base = speed;
-  302   1      }
-  303          
-  304          
-  305          
-  306          
-  307          
-  308          
-  309          
-  310          
-  311          // 偏差滑动平均滤波
-  312          float filter(float value) 
-  313          {
-  314   1          static float filter_buf[3] = {0};
-  315   1      
-  316   1        filter_buf[2] = filter_buf[1];
-C251 COMPILER V5.60.0,  control                                                            08/06/25  09:32:11  PAGE 6   
-
-  317   1        filter_buf[1] = filter_buf[0];
-  318   1        filter_buf[0] = value;
-  319   1      
-  320   1        return (filter_buf[2] + filter_buf[1] + filter_buf[0]) / 3.0f;
-  321   1      }
-  322          
-  323          
-  324          
-  325          
-  326          float limit_range(float input, float limit)
-  327          {
-  328   1          if (input > limit)
-  329   1              return limit;
-  330   1          else if (input < -limit)
-  331   1              return -limit;
-  332   1          else
-  333   1              return input;
-  334   1      }
-  335          
-  336          
-  337          
-  338          /**
-  339           * @brief 根据中间电感值计算动态权重。
-  340           *
-  341           * 这个函数实现了根据中间电感读数(M)确定权重因子的逻辑。
-  342           * 权重用于根据机器人是在直线上还是接近/处于弯道来动态调整
-  343           * 水平循迹（侧面电感）的影响。
-  344           * 阈值根据提供的数据进行调整：直道 >= 400 (100%权重),
-  345           * 100-400 线性变化, < 100 (0%权重)。
-  346           *
-  347           * @param M 中间电感传感器的平均读数 (MID)。
-  348           * @return 表示权重的浮点数，范围在 0.0 到 1.0 之间。
-  349           */
-  350          float Calculate_Weight_Mid(uint16 M)
-  351          {
-  352   1        
-  353   1        
-  354   1          #if OFF//   ON OFF  
+  254           * @brief 根据中间电感值计算动态权重。
+  255           *
+  256           * 这个函数实现了根据中间电感读数(M)确定权重因子的逻辑。
+  257           * 权重用于根据机器人是在直线上还是接近/处于弯道来动态调整
+  258           * 水平循迹（侧面电感）的影响。
+  259           * 阈值根据提供的数据进行调整：直道 >= 400 (100%权重),
+  260           * 100-400 线性变化, < 100 (0%权重)。
+  261           *
+  262           * @param M 中间电感传感器的平均读数 (MID)。
+  263           * @return 表示权重的浮点数，范围在 0.0 到 1.0 之间。
+  264           */
+  265          float Calculate_Weight_Mid(uint16 M)
+  266          {
+  267   1        
+  268   1        
+  269   1          #if OFF//   ON OFF  
                    const float M_low   =  30.0f;   // 脱线下限
                    const float M_high  = 500.0f;   // 完全直道上限
                    const float k_min   =   0.6f;   // 脱线时最小权重（60%）
@@ -401,14 +311,12 @@ stmt  level    source
                    // 插值 k ∈ [k_min, k_max]
                    return k_min + (k_max - k_min) * t;
                    #endif
-  378   1        
-  379   1        
-  380   1        
-  381   1          //动态电感bug有点问题，因为当车脱线了，中电感的值小于100，横电感计算出来的误差权重是0，但是这个时候竖向
+  293   1        
+  294   1        
+  295   1        
+  296   1          //动态电感bug有点问题，因为当车脱线了，中电感的值小于100，横电感计算出来的误差权重是0，但是这个时候竖向
              -的电感值又很小导致车子的方向环不作用
-C251 COMPILER V5.60.0,  control                                                            08/06/25  09:32:11  PAGE 7   
-
-  382   1          #if 0
+  297   1          #if 0
                    float k;
                
                    // 1) M >= 500：完全信任横电感 → k = 100
@@ -430,78 +338,99 @@ stmt  level    source
                    k *= 0.01f;
                    if (k < 0.0f) k = 0.0f;
                    if (k > 1.0f) k = 1.0f;
+C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 6   
+
                
                    return k;
                    
                  
                    #endif
-  409   1          
-  410   1          
-  411   1          
-  412   1          #if 1
-  413   1          
-  414   1          
-  415   1           float k;
-  416   1      
-  417   1          if (M >= 36.0f) {
-  418   2              // 完全信任横电感
-  419   2              k = 1.0f;
-  420   2          }
-  421   1          else if (M >= 14.0f) {
-  422   2              // 线性过渡：M 从 14 → 36 时，k 从 0.1 → 1.0
-  423   2              // 斜率 m = (1.0f - 0.1f) / (36.0f - 14.0f) = 0.9f / 22.0f ≈ 0.040909f
-  424   2              // 截距 b = 0.1f - 14.0f * m ≈ -0.472727f
-  425   2              const float m = 0.9f / 22.0f;
-  426   2              const float b = 0.1f - 14.0f * m;
-  427   2              k = m * M + b;
-  428   2          }
-  429   1          else {
-  430   2              // 最低也保留 0.1 的横电感权重
-  431   2              k = 0.1f;
-  432   2          }
-  433   1      
-  434   1          // 可选：确保数值在 [0.1, 1.0] 范围内
-  435   1          if (k < 0.1f) k = 0.1f;
-  436   1          if (k > 1.0f) k = 1.0f;
-  437   1      
-  438   1          return k;
-  439   1          
-  440   1          
-  441   1          
-  442   1          
-  443   1          
-  444   1          #endif
-  445   1          
-  446   1          
-  447   1          
-C251 COMPILER V5.60.0,  control                                                            08/06/25  09:32:11  PAGE 8   
+  324   1          
+  325   1          
+  326   1          
+  327   1          #if 1
+  328   1          
+  329   1          
+  330   1           float k;
+  331   1      
+  332   1          if (M >= 36.0f) {
+  333   2              // 完全信任横电感
+  334   2              k = 1.0f;
+  335   2          }
+  336   1          else if (M >= 14.0f) {
+  337   2              // 线性过渡：M 从 14 → 36 时，k 从 0.1 → 1.0
+  338   2              // 斜率 m = (1.0f - 0.1f) / (36.0f - 14.0f) = 0.9f / 22.0f ≈ 0.040909f
+  339   2              // 截距 b = 0.1f - 14.0f * m ≈ -0.472727f
+  340   2              const float m = 0.9f / 22.0f;
+  341   2              const float b = 0.1f - 14.0f * m;
+  342   2              k = m * M + b;
+  343   2          }
+  344   1          else {
+  345   2              // 最低也保留 0.1 的横电感权重
+  346   2              k = 0.1f;
+  347   2          }
+  348   1      
+  349   1          // 可选：确保数值在 [0.1, 1.0] 范围内
+  350   1          if (k < 0.1f) k = 0.1f;
+  351   1          if (k > 1.0f) k = 1.0f;
+  352   1      
+  353   1          return k;
+  354   1          
+  355   1          
+  356   1          
+  357   1          
+  358   1          
+  359   1          #endif
+  360   1          
+  361   1          
+  362   1          
+  363   1      }
+  364          
+  365          
+  366          
+  367          
+  368          /**
+  369           * @brief 根据变量的绝对值是否达到或超过设定的阈值来控制蜂鸣器。
+  370           *
+  371           * 此函数检查输入变量 check_value 的绝对值。
+  372           * 如果绝对值 >= abs_threshold，则打开蜂鸣器 (设置 P52 = 1)。
+  373           * 如果绝对值 < abs_threshold，则关闭蜂鸣器 (设置 P52 = 0)。
+  374           *
+  375           * 前提条件：
+  376           * - 需要包含 <math.h> 头文件。
+  377           * - 变量 P52 必须已经正确定义为控制蜂鸣器的输出引脚，并且 1 表示打开，0 表示关闭。
+  378           *
+  379           * @param check_value 要监控的变量的值 (浮点型)。
+  380           * @param abs_threshold 触发蜂鸣器响起的绝对值阈值 (浮点型)。
+  381           */
+  382          void buzzer_control_with_enable(float check_value, float abs_threshold, int enable_state)
+  383          {
+  384   1          // 检查两个条件：
+C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 7   
 
-  448   1      }
-  449          
-  450          
-  451          
-  452          
-  453          /**
-  454           * @brief 根据变量的绝对值是否达到或超过设定的阈值来控制蜂鸣器。
-  455           *
-  456           * 此函数检查输入变量 check_value 的绝对值。
-  457           * 如果绝对值 >= abs_threshold，则打开蜂鸣器 (设置 P52 = 1)。
-  458           * 如果绝对值 < abs_threshold，则关闭蜂鸣器 (设置 P52 = 0)。
-  459           *
-  460           * 前提条件：
-  461           * - 需要包含 <math.h> 头文件。
-  462           * - 变量 P52 必须已经正确定义为控制蜂鸣器的输出引脚，并且 1 表示打开，0 表示关闭。
-  463           *
-  464           * @param check_value 要监控的变量的值 (浮点型)。
-  465           * @param abs_threshold 触发蜂鸣器响起的绝对值阈值 (浮点型)。
-  466           */
-  467          void buzzer_control_with_enable(float check_value, float abs_threshold, int enable_state)
-  468          {
-  469   1          // 检查两个条件：
-  470   1          // 1. 变量的绝对值是否达到阈值
-  471   1          // 2. 蜂鸣器是否被启用 (enable_state == 1)
-  472   1          #if 0
-                     if ((fabs(check_value) >= abs_threshold) && (enable_state == 1))
+  385   1          // 1. 变量的绝对值是否达到阈值
+  386   1          // 2. 蜂鸣器是否被启用 (enable_state == 1)
+  387   1          #if 1
+  388   1            if ((fabs(check_value) >= abs_threshold) && (enable_state == 1))
+  389   1          {
+  390   2              // 两个条件都满足，打开蜂鸣器
+  391   2              P52 = 1; // 假设 P52 = 1 表示打开
+  392   2          }
+  393   1          else
+  394   1          {
+  395   2              // 任何一个条件不满足 (绝对值小于阈值 或 enable_state 不是 1)，关闭蜂鸣器
+  396   2              P52 = 0; // 假设 P52 = 0 表示关闭
+  397   2          }
+  398   1          #endif
+  399   1          
+  400   1          
+  401   1          
+  402   1          
+  403   1          
+  404   1          
+  405   1          #if 0
+               
+                   if ((check_value== abs_threshold) && (enable_state == 1))
                    {
                        // 两个条件都满足，打开蜂鸣器
                        P52 = 1; // 假设 P52 = 1 表示打开
@@ -512,526 +441,458 @@ stmt  level    source
                        P52 = 0; // 假设 P52 = 0 表示关闭
                    }
                    #endif
-  484   1          
-  485   1          
-  486   1          
-  487   1          
-  488   1          
-  489   1          
-  490   1          #if 1
-  491   1      
-  492   1          if ((check_value== abs_threshold) && (enable_state == 1))
-  493   1          {
-  494   2              // 两个条件都满足，打开蜂鸣器
-  495   2              P52 = 1; // 假设 P52 = 1 表示打开
-  496   2          }
-  497   1          else
-  498   1          {
-  499   2              // 任何一个条件不满足 (绝对值小于阈值 或 enable_state 不是 1)，关闭蜂鸣器
-  500   2              P52 = 0; // 假设 P52 = 0 表示关闭
-  501   2          }
-  502   1          #endif
-  503   1          
-  504   1      
-  505   1      
-  506   1      }
-  507          
-  508          
-  509          
-  510          
-  511          
-  512          
-  513          
-C251 COMPILER V5.60.0,  control                                                            08/06/25  09:32:11  PAGE 9   
-
-  514          
-  515          
-  516            /*********************电感处理*********************//*********************电感处理*********************/
+  418   1          
+  419   1      
+  420   1      
+  421   1      }
+  422          
+  423          
+  424          
+  425          
+  426          
+  427          
+  428          
+  429          
+  430          
+  431            /*********************电感处理*********************//*********************电感处理*********************/
              -/*********************电感处理*********************/ 
+  432          
+  433          
+  434          
+  435          
+  436          
+  437          
+  438            /*********************读取*********************//*********************读取*********************//*******
+             -**************读取*********************/ 
+  439          
+  440          
+  441          uint16 read_adc_average(ADCN_enum channel, unsigned short avg_times, ADCRES_enum resolution)
+  442          {
+  443   1          unsigned long sum = 0;
+  444   1          unsigned short adc_value = 0;
+  445   1          unsigned short i;
+  446   1      
+  447   1          if (avg_times == 0) {
+  448   2              avg_times = 1;
+C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 8   
+
+  449   2          }
+  450   1      
+  451   1          for (i = 0; i < avg_times; i++)
+  452   1          {
+  453   2              adc_value = adc_once(channel, resolution);
+  454   2      
+  455   2              sum += adc_value;
+  456   2          }
+  457   1      
+  458   1          return (uint16)(sum / avg_times);
+  459   1      }
+  460          
+  461            /*********************限幅*********************//*********************限幅*********************//*******
+             -**************限幅*********************/ 
+  462          
+  463          
+  464          float limit_float(float value, float min_limit, float max_limit)
+  465          {
+  466   1          float result;
+  467   1      
+  468   1          if (value < min_limit)
+  469   1          {
+  470   2              result = min_limit;
+  471   2          }
+  472   1          else if (value > max_limit)
+  473   1          {
+  474   2              result = max_limit;
+  475   2          }
+  476   1          else
+  477   1          {
+  478   2              result = value;
+  479   2          }
+  480   1      
+  481   1          return result;
+  482   1      }
+  483          
+  484            /*********************归一化*********************//*********************归一化*********************//***
+             -******************归一化*********************/ 
+  485          
+  486          
+  487          float normalize_float(float value, float min, float max)
+  488          {
+  489   1          float diff;
+  490   1          float range;
+  491   1          float result;
+  492   1      
+  493   1          if (max <= min)
+  494   1          {
+  495   2              return 0.0f;
+  496   2          }
+  497   1          //分母
+  498   1          range = max - min;
+  499   1          //分子
+  500   1          diff = value - min;
+  501   1      
+  502   1          result = (diff * 100.0f) / range;
+  503   1      
+  504   1          // 根据 Dianci_Guiyi 的逻辑添加限幅
+  505   1          if (result > 100.0f)
+  506   1          {
+  507   2              result = 100.0f;
+  508   2          }
+  509   1      
+  510   1          if (result < 0.0f)
+  511   1          {
+  512   2              result = 0.0f;
+C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 9   
+
+  513   2          }
+  514   1      
+  515   1          return result;
+  516   1      }
   517          
   518          
-  519          
-  520          
-  521          
-  522          
-  523            /*********************读取*********************//*********************读取*********************//*******
-             -**************读取*********************/ 
-  524          
-  525          
-  526          uint16 read_adc_average(ADCN_enum channel, unsigned short avg_times, ADCRES_enum resolution)
-  527          {
-  528   1          unsigned long sum = 0;
-  529   1          unsigned short adc_value = 0;
-  530   1          unsigned short i;
-  531   1      
-  532   1          if (avg_times == 0) {
-  533   2              avg_times = 1;
-  534   2          }
-  535   1      
-  536   1          for (i = 0; i < avg_times; i++)
-  537   1          {
-  538   2              adc_value = adc_once(channel, resolution);
-  539   2      
-  540   2              sum += adc_value;
-  541   2          }
-  542   1      
-  543   1          return (uint16)(sum / avg_times);
-  544   1      }
-  545          
-  546            /*********************限幅*********************//*********************限幅*********************//*******
-             -**************限幅*********************/ 
-  547          
-  548          
-  549          float limit_float(float value, float min_limit, float max_limit)
-  550          {
-  551   1          float result;
-  552   1      
-  553   1          if (value < min_limit)
-  554   1          {
-  555   2              result = min_limit;
-  556   2          }
-  557   1          else if (value > max_limit)
-  558   1          {
-  559   2              result = max_limit;
-  560   2          }
-  561   1          else
-  562   1          {
-  563   2              result = value;
-  564   2          }
-  565   1      
-  566   1          return result;
-  567   1      }
-  568          
-  569            /*********************归一化*********************//*********************归一化*********************//***
-             -******************归一化*********************/ 
-  570          
-  571          
-  572          float normalize_float(float value, float min, float max)
-  573          {
-  574   1          float diff;
-  575   1          float range;
-C251 COMPILER V5.60.0,  control                                                            08/06/25  09:32:11  PAGE 10  
-
-  576   1          float result;
-  577   1      
-  578   1          if (max <= min)
-  579   1          {
-  580   2              return 0.0f;
-  581   2          }
-  582   1          //分母
-  583   1          range = max - min;
-  584   1          //分子
-  585   1          diff = value - min;
-  586   1      
-  587   1          result = (diff * 100.0f) / range;
-  588   1      
-  589   1          // 根据 Dianci_Guiyi 的逻辑添加限幅
-  590   1          if (result > 100.0f)
-  591   1          {
-  592   2              result = 100.0f;
-  593   2          }
-  594   1      
-  595   1          if (result < 0.0f)
-  596   1          {
-  597   2              result = 0.0f;
-  598   2          }
-  599   1      
-  600   1          return result;
-  601   1      }
-  602          
-  603          
-  604          /**
-  605           * @brief 根据中间电感值 (MID) 计算动态目标速度，呈二次函数型加速上升。
-  606           *
-  607           * 速度从270 (当 MID=28 时) 以二次曲线方式增加到 380 (当 MID=60 时)。
-  608           * - 如果 MID <= 28, 速度为 270.
-  609           * - 如果 MID >= 60, 速度为 380.
-  610           * - 否则, 速度按二次函数插值。
-  611           * 具体地, 使用 (归一化MID比例)^2 的方式来实现加速上升效果。
-  612           *
-  613           * @param current_mid_value 当前中间电感传感器的读数。
-  614           * @return 计算得到的目标速度。
-  615           */
-  616          float calculate_dynamic_target_speed_quadratic(float current_mid_value) {
-  617   1          #if 1
-  618   1          const int MID_min_threshold = 15;   // 修改：原为 28
-  619   1          const int speed_at_MID_min = 120;
-  620   1          const int MID_max_threshold = 25;   // 修改：原为 60
-  621   1          const int speed_at_MID_max = 320;
-  622   1      
-  623   1          int calculated_speed;
-  624   1      
-  625   1          if (current_mid_value <= MID_min_threshold) {
-  626   2              calculated_speed = speed_at_MID_min;
-  627   2          } else if (current_mid_value >= MID_max_threshold) {
-  628   2              calculated_speed = speed_at_MID_max;
-  629   2          } else {
-  630   2              // 1. 归一化 MID 值到 0~1
-  631   2              float mid_ratio = (current_mid_value - (float)MID_min_threshold) / 
-  632   2                                ((float)MID_max_threshold - (float)MID_min_threshold);
-  633   2              
-  634   2              // 2. 使用四次函数加速因子
-  635   2              float quartic_factor = mid_ratio * mid_ratio * mid_ratio * mid_ratio;           // mid_ratio^4
-  636   2              
-  637   2              // 3. 计算目标速度
-  638   2              float speed_range = (float)(speed_at_MID_max - speed_at_MID_min);
-  639   2              calculated_speed = (int)((float)speed_at_MID_min + quartic_factor * speed_range);
-  640   2          }
-  641   1      
-C251 COMPILER V5.60.0,  control                                                            08/06/25  09:32:11  PAGE 11  
-
-  642   1          return calculated_speed;
-  643   1          
-  644   1          #endif
-  645   1          
-  646   1          
-  647   1      
-  648   1          
-  649   1          
-  650   1          
-  651   1      }
-  652          
-  653          /*********************rgb*********************//*********************rgb*********************//**********
+  519          /**
+  520           * @brief 根据中间电感值 (MID) 计算动态目标速度，呈二次函数型加速上升。
+  521           *
+  522           * 速度从270 (当 MID=28 时) 以二次曲线方式增加到 380 (当 MID=60 时)。
+  523           * - 如果 MID <= 28, 速度为 270.
+  524           * - 如果 MID >= 60, 速度为 380.
+  525           * - 否则, 速度按二次函数插值。
+  526           * 具体地, 使用 (归一化MID比例)^2 的方式来实现加速上升效果。
+  527           *
+  528           * @param current_mid_value 当前中间电感传感器的读数。
+  529           * @return 计算得到的目标速度。
+  530           */
+  531          float calculate_dynamic_target_speed_quadratic(float current_mid_value) {
+  532   1          #if 1
+  533   1          const int MID_min_threshold = 26;   // 修改：原为 28
+  534   1          const int speed_at_MID_min = 230;
+  535   1          const int MID_max_threshold = 30;   // 修改：原为 60
+  536   1          const int speed_at_MID_max = 330;
+  537   1      
+  538   1          int calculated_speed;
+  539   1      
+  540   1          if (current_mid_value <= MID_min_threshold) {
+  541   2              calculated_speed = speed_at_MID_min;
+  542   2          } else if (current_mid_value >= MID_max_threshold) {
+  543   2              calculated_speed = speed_at_MID_max;
+  544   2          } else {
+  545   2              // 1. 归一化 MID 值到 0~1
+  546   2              float mid_ratio = (current_mid_value - (float)MID_min_threshold) / 
+  547   2                                ((float)MID_max_threshold - (float)MID_min_threshold);
+  548   2              
+  549   2              // 2. 使用四次函数加速因子
+  550   2              float quartic_factor = mid_ratio * mid_ratio * mid_ratio * mid_ratio;           // mid_ratio^4
+  551   2              
+  552   2              // 3. 计算目标速度
+  553   2              float speed_range = (float)(speed_at_MID_max - speed_at_MID_min);
+  554   2              calculated_speed = (int)((float)speed_at_MID_min + quartic_factor * speed_range);
+  555   2          }
+  556   1      
+  557   1          return calculated_speed;
+  558   1          
+  559   1          #endif
+  560   1          
+  561   1          
+  562   1      }
+  563          
+  564          /*********************rgb*********************//*********************rgb*********************//**********
              -***********rgb*********************/ 
-  654          
-  655          
-  656          
-  657          void set_rgb_pins(int p26_val, int p74_val, int p07_val) {
-  658   1          P26 = p26_val;
-  659   1          P74 = p74_val;
-  660   1          P07 = p07_val;
-  661   1      }
-  662          
-  663          void control_rgb_led_conditional(float check_value, float abs_threshold, RgbColorCode_t feedback_color, i
-             -nt enable_state) {
-  664   1          // 检查两个条件：
-  665   1          // 1. 监控值的绝对值是否达到或超过阈值
-  666   1          // 2. RGB LED 是否被启用 (enable_state == 1)
-  667   1        
-  668   1          #if 1
-  669   1          if ((fabs(check_value) >= abs_threshold) && (enable_state == 1)) {
-  670   2              switch (feedback_color) {
-  671   3                  case RGB_COLOR_OFF:
-  672   3                      set_rgb_pins(0, 0, 0);
-  673   3                      break;
-  674   3                  case RGB_COLOR_WHITE:
-  675   3                      set_rgb_pins(0, 0, 1);
-  676   3                      break;
-  677   3                  case RGB_COLOR_CYAN:
-  678   3                      set_rgb_pins(0, 1, 0);
-  679   3                      break;
-  680   3                  case RGB_COLOR_YELLOW_GREEN:
-  681   3                      set_rgb_pins(1, 0, 0);
-  682   3                      break;
-  683   3                  case RGB_COLOR_MAGENTA:
-  684   3                      set_rgb_pins(0, 1, 1);
-  685   3                      break;
-  686   3                  case RGB_COLOR_GREEN:
-  687   3                      set_rgb_pins(1, 1, 0);
-  688   3                      break;
-  689   3                  case RGB_COLOR_RED:
-  690   3                      set_rgb_pins(1, 0, 1);
-  691   3                      break;
-  692   3                  case RGB_COLOR_BLUE:
-  693   3                      set_rgb_pins(1, 1, 1);
-  694   3                      break;
-  695   3                  default:
-  696   3                      set_rgb_pins(0, 0, 0); // 安全起见，关闭LED
-  697   3                      break;
-  698   3              }
-  699   2          } else {
-  700   2              set_rgb_pins(0, 0, 0);
-  701   2          }
-  702   1          #endif
-  703   1          
-  704   1      
-  705   1          
-C251 COMPILER V5.60.0,  control                                                            08/06/25  09:32:11  PAGE 12  
+  565          
+  566          
+  567          
+  568          //void set_rgb_pins(int p26_val, int p74_val, int p07_val) {
+  569          //    P26 = p26_val;
+  570          //    P74 = p74_val;
+  571          //    P07 = p07_val;
+  572          //}
+  573          
+  574          //void control_rgb_led_conditional(float check_value, float abs_threshold, RgbColorCode_t feedback_color,
+             - int enable_state) {
+  575          //    // 检查两个条件：
+  576          //    // 1. 监控值的绝对值是否达到或超过阈值
+C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 10  
 
-  706   1      }
-  707          
-  708          void control_rgb_led( RgbColorCode_t feedback_color) {
-  709   1      
-  710   1              switch (feedback_color) {
-  711   2                  case RGB_COLOR_OFF:
-  712   2                      set_rgb_pins(0, 0, 0);
-  713   2                      break;
-  714   2                  case RGB_COLOR_WHITE:
-  715   2                      set_rgb_pins(0, 0, 1);
-  716   2                      break;
-  717   2                  case RGB_COLOR_CYAN:
-  718   2                      set_rgb_pins(0, 1, 0);
-  719   2                      break;
-  720   2                  case RGB_COLOR_YELLOW_GREEN:
-  721   2                      set_rgb_pins(1, 0, 0);
-  722   2                      break;
-  723   2                  case RGB_COLOR_MAGENTA:
-  724   2                      set_rgb_pins(0, 1, 1);
-  725   2                      break;
-  726   2                  case RGB_COLOR_GREEN:
-  727   2                      set_rgb_pins(1, 1, 0);
-  728   2                      break;
-  729   2                  case RGB_COLOR_RED:
-  730   2                      set_rgb_pins(1, 0, 1);
-  731   2                      break;
-  732   2                  case RGB_COLOR_BLUE:
-  733   2                      set_rgb_pins(1, 1, 1);
-  734   2                      break;
-  735   2                  default:
-  736   2                      set_rgb_pins(0, 0, 0); // 安全起见，关闭LED
-  737   2                      break;
-  738   2              }
-  739   1      
-  740   1      }
-  741          
-  742          /*********************角度环*********************//*********************角度环*********************//****
+  577          //    // 2. RGB LED 是否被启用 (enable_state == 1)
+  578          //  
+  579          //    #if 1
+  580          //    if ((fabs(check_value) >= abs_threshold) && (enable_state == 1)) {
+  581          //        switch (feedback_color) {
+  582          //            case RGB_COLOR_OFF:
+  583          //                set_rgb_pins(0, 0, 0);
+  584          //                break;
+  585          //            case RGB_COLOR_WHITE:
+  586          //                set_rgb_pins(0, 0, 1);
+  587          //                break;
+  588          //            case RGB_COLOR_CYAN:
+  589          //                set_rgb_pins(0, 1, 0);
+  590          //                break;
+  591          //            case RGB_COLOR_YELLOW_GREEN:
+  592          //                set_rgb_pins(1, 0, 0);
+  593          //                break;
+  594          //            case RGB_COLOR_MAGENTA:
+  595          //                set_rgb_pins(0, 1, 1);
+  596          //                break;
+  597          //            case RGB_COLOR_GREEN:
+  598          //                set_rgb_pins(1, 1, 0);
+  599          //                break;
+  600          //            case RGB_COLOR_RED:
+  601          //                set_rgb_pins(1, 0, 1);
+  602          //                break;
+  603          //            case RGB_COLOR_BLUE:
+  604          //                set_rgb_pins(1, 1, 1);
+  605          //                break;
+  606          //            default:
+  607          //                set_rgb_pins(0, 0, 0); // 安全起见，关闭LED
+  608          //                break;
+  609          //        }
+  610          //    } else {
+  611          //        set_rgb_pins(0, 0, 0);
+  612          //    }
+  613          //    #endif
+  614          //    
+  615          
+  616          //    
+  617          //}
+  618          
+  619          //void control_rgb_led( RgbColorCode_t feedback_color) {
+  620          
+  621          //        switch (feedback_color) {
+  622          //            case RGB_COLOR_OFF:
+  623          //                set_rgb_pins(0, 0, 0);
+  624          //                break;
+  625          //            case RGB_COLOR_WHITE:
+  626          //                set_rgb_pins(0, 0, 1);
+  627          //                break;
+  628          //            case RGB_COLOR_CYAN:
+  629          //                set_rgb_pins(0, 1, 0);
+  630          //                break;
+  631          //            case RGB_COLOR_YELLOW_GREEN:
+  632          //                set_rgb_pins(1, 0, 0);
+  633          //                break;
+  634          //            case RGB_COLOR_MAGENTA:
+  635          //                set_rgb_pins(0, 1, 1);
+  636          //                break;
+  637          //            case RGB_COLOR_GREEN:
+  638          //                set_rgb_pins(1, 1, 0);
+  639          //                break;
+  640          //            case RGB_COLOR_RED:
+  641          //                set_rgb_pins(1, 0, 1);
+  642          //                break;
+C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 11  
+
+  643          //            case RGB_COLOR_BLUE:
+  644          //                set_rgb_pins(1, 1, 1);
+  645          //                break;
+  646          //            default:
+  647          //                set_rgb_pins(0, 0, 0); // 安全起见，关闭LED
+  648          //                break;
+  649          //        }
+  650          
+  651          //}
+  652          
+  653          /*********************角度环*********************//*********************角度环*********************//****
              -*****************角度环*********************/  
-  743          /*******************************卡尔曼滤波********************************//*****************************
+  654          /*******************************卡尔曼滤波********************************//*****************************
              -**卡尔曼滤波********************************//*******************************卡尔曼滤波********************************/
+  655          
+  656          ///* 微分时间 */
+  657          //float dt_my = 0.005f;
+  658          //float rad2deg = 57.29578f;  /* 弧度到角度的换算系数 */
+  659          
+  660          ///* 初始偏移量 */
+  661          //float origin_ax_offset = 0;
+  662          //float origin_ay_offset = 0;
+  663          //float origin_az_offset = 0;
+  664          //float origin_gx_offset = 0;
+  665          //float origin_gy_offset = 0;
+  666          //float origin_gz_offset = 0;
+  667          
+  668          ///* mpu坐标系换算到x和y轴上的速度 */
+  669          //float roll_v = 0;
+  670          //float pitch_v = 0;
+  671          //float yaw_v = 0;
+  672          
+  673          ///* 三个状态 */
+  674          //float gyro_roll_my = 0;
+  675          //float gyro_pitch_my = 0;
+  676          //float gyro_yaw = 0;
+  677          
+  678          ///* 观测状态值 */
+  679          //float acc_roll = 0;
+  680          //float acc_pitch = 0;
+  681          
+  682          ///* 最后的估计值 */
+  683          //float k_roll = 0;
+  684          //float k_pitch = 0;
+  685          //float k_yaw = 0;
+  686          
+  687          ///* 误差协方差矩阵 */
+  688          //float e_P[2][2];
+  689          ///* 卡尔曼增益系数 */
+  690          //float k_k[2][2];
+  691          
+  692          //void origin_data() {
+  693          //    int i;
+  694          
+  695          //    origin_ax_offset = 0;
+  696          //    origin_ay_offset = 0;
+  697          //    origin_az_offset = 0;
+  698          //    origin_gx_offset = 0;
+  699          //    origin_gy_offset = 0;
+  700          //    origin_gz_offset = 0;
+  701          
+  702          //    for (i = 0; i < 300; i++) {
+  703          //        imu660ra_get_acc();
+  704          //        imu660ra_get_gyro();
+  705          
+  706          //        origin_ax_offset += imu660ra_acc_transition(imu660ra_acc_x);
+C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 12  
+
+  707          //        origin_ay_offset += imu660ra_acc_transition(imu660ra_acc_y);
+  708          //        origin_az_offset += imu660ra_acc_transition(imu660ra_acc_z);
+  709          
+  710          //        origin_gx_offset += imu660ra_gyro_transition(imu660ra_gyro_x);
+  711          //        origin_gy_offset += imu660ra_gyro_transition(imu660ra_gyro_y);
+  712          //        origin_gz_offset += imu660ra_gyro_transition(imu660ra_gyro_z);
+  713          //    }
+  714          
+  715          //    origin_ax_offset /= 300.0f;
+  716          //    origin_ay_offset /= 300.0f;
+  717          //    origin_az_offset /= 300.0f;
+  718          //    origin_gx_offset /= 300.0f;
+  719          //    origin_gy_offset /= 300.0f;
+  720          //    origin_gz_offset /= 300.0f;
+  721          //}
+  722          
+  723          //void kalanma_data() {
+  724          //    float ax, ay, az;
+  725          //    float gx, gy, gz;
+  726          //    float sin_roll, cos_roll, sin_pitch, cos_pitch;
+  727          //    float acc_ax_adj, acc_ay_adj, acc_az_adj;
+  728          
+  729          //    imu660ra_get_acc();
+  730          //    imu660ra_get_gyro();
+  731          
+  732          //    ax = imu660ra_acc_transition(imu660ra_acc_x);
+  733          //    ay = imu660ra_acc_transition(imu660ra_acc_y);
+  734          //    az = imu660ra_acc_transition(imu660ra_acc_z);
+  735          
+  736          //    gx = imu660ra_gyro_transition(imu660ra_gyro_x);
+  737          //    gy = imu660ra_gyro_transition(imu660ra_gyro_y);
+  738          //    gz = imu660ra_gyro_transition(imu660ra_gyro_z);
+  739          
+  740          //    sin_roll = (float)sin(k_roll / rad2deg);
+  741          //    cos_roll = (float)cos(k_roll / rad2deg);
+  742          //    sin_pitch = (float)sin(k_pitch / rad2deg);
+  743          //    cos_pitch = (float)cos(k_pitch / rad2deg);
   744          
-  745          ///* 微分时间 */
-  746          //float dt_my = 0.005f;
-  747          //float rad2deg = 57.29578f;  /* 弧度到角度的换算系数 */
-  748          
-  749          ///* 初始偏移量 */
-  750          //float origin_ax_offset = 0;
-  751          //float origin_ay_offset = 0;
-  752          //float origin_az_offset = 0;
-  753          //float origin_gx_offset = 0;
-  754          //float origin_gy_offset = 0;
-  755          //float origin_gz_offset = 0;
-  756          
-  757          ///* mpu坐标系换算到x和y轴上的速度 */
-  758          //float roll_v = 0;
-  759          //float pitch_v = 0;
-  760          //float yaw_v = 0;
-  761          
-  762          ///* 三个状态 */
-  763          //float gyro_roll_my = 0;
-  764          //float gyro_pitch_my = 0;
-  765          //float gyro_yaw = 0;
-  766          
-  767          ///* 观测状态值 */
-  768          //float acc_roll = 0;
-  769          //float acc_pitch = 0;
-C251 COMPILER V5.60.0,  control                                                            08/06/25  09:32:11  PAGE 13  
+  745          //    roll_v = (gx - origin_gx_offset)
+  746          //           + (sin_pitch * sin_roll / cos_pitch) * (gy - origin_gy_offset)
+  747          //           + (sin_pitch * cos_roll / cos_pitch) * (gz - origin_gz_offset);
+  748          //    pitch_v = cos_roll * (gy - origin_gy_offset) - sin_roll * (gz - origin_gz_offset);
+  749          //    yaw_v = (sin_roll / cos_pitch) * (gy - origin_gy_offset)
+  750          //          + (cos_roll / cos_pitch) * (gz - origin_gz_offset);
+  751          
+  752          //    roll_v /= 100.0f;
+  753          //    pitch_v /= 100.0f;
+  754          //    yaw_v /= 100.0f;
+  755          
+  756          //    gyro_roll_my = k_roll + dt_my * roll_v;
+  757          //    gyro_pitch_my = k_pitch + dt_my * pitch_v;
+  758          //    gyro_yaw = k_yaw / 30.0f + dt_my * (yaw_v + 0.2f);  /* 做角度补偿 */
+  759          
+  760          //    /* Step 2: 计算先验误差协方差矩阵 */
+  761          //    e_P[0][0] += 0.0025f;
+  762          //    e_P[1][1] += 0.0025f;
+  763          
+  764          //    /* Step 3: 更新卡尔曼增益K */
+  765          //    k_k[0][0] = e_P[0][0] / (e_P[0][0] + 0.3f);
+  766          //    k_k[1][1] = e_P[1][1] / (e_P[1][1] + 0.3f);
+  767          
+  768          //    /* Step 4: 计算观测状态 */
+  769          //    acc_ax_adj = ax - origin_ax_offset;
+  770          //    acc_ay_adj = ay - origin_ay_offset;
+  771          //    acc_az_adj = az - origin_az_offset;
+  772          
+C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 13  
 
-  770          
-  771          ///* 最后的估计值 */
-  772          //float k_roll = 0;
-  773          //float k_pitch = 0;
-  774          //float k_yaw = 0;
-  775          
-  776          ///* 误差协方差矩阵 */
-  777          //float e_P[2][2];
-  778          ///* 卡尔曼增益系数 */
-  779          //float k_k[2][2];
+  773          //    acc_roll = (float)(atan2(acc_ay_adj, acc_az_adj) * rad2deg);
+  774          //    acc_pitch = (float)(-atan2(acc_ax_adj,
+  775          //        sqrt(acc_ay_adj * acc_ay_adj + acc_az_adj * acc_az_adj)) * rad2deg);
+  776          
+  777          //    k_roll = gyro_roll_my + k_k[0][0] * (acc_roll - gyro_roll_my);
+  778          //    k_pitch = gyro_pitch_my + k_k[1][1] * (acc_pitch - gyro_pitch_my);
+  779          //    k_yaw = 30.0f * gyro_yaw;
   780          
-  781          //void origin_data() {
-  782          //    int i;
-  783          
-  784          //    origin_ax_offset = 0;
-  785          //    origin_ay_offset = 0;
-  786          //    origin_az_offset = 0;
-  787          //    origin_gx_offset = 0;
-  788          //    origin_gy_offset = 0;
-  789          //    origin_gz_offset = 0;
+  781          //    /* Step 5: 更新协方差矩阵 */
+  782          //    e_P[0][0] *= (1.0f - k_k[0][0]);
+  783          //    e_P[1][1] *= (1.0f - k_k[1][1]);
+  784          //}
+  785          
+  786          ///* 初始化矩阵变量（必须单独写） */
+  787          //void init_kalman() {
+  788          //    e_P[0][0] = 1.0f; e_P[0][1] = 0.0f;
+  789          //    e_P[1][0] = 0.0f; e_P[1][1] = 1.0f;
   790          
-  791          //    for (i = 0; i < 300; i++) {
-  792          //        imu660ra_get_acc();
-  793          //        imu660ra_get_gyro();
+  791          //    k_k[0][0] = 0.0f; k_k[0][1] = 0.0f;
+  792          //    k_k[1][0] = 0.0f; k_k[1][1] = 0.0f;
+  793          //}
   794          
-  795          //        origin_ax_offset += imu660ra_acc_transition(imu660ra_acc_x);
-  796          //        origin_ay_offset += imu660ra_acc_transition(imu660ra_acc_y);
-  797          //        origin_az_offset += imu660ra_acc_transition(imu660ra_acc_z);
+  795          
+  796          
+  797          
   798          
-  799          //        origin_gx_offset += imu660ra_gyro_transition(imu660ra_gyro_x);
-  800          //        origin_gy_offset += imu660ra_gyro_transition(imu660ra_gyro_y);
-  801          //        origin_gz_offset += imu660ra_gyro_transition(imu660ra_gyro_z);
-  802          //    }
-  803          
-  804          //    origin_ax_offset /= 300.0f;
-  805          //    origin_ay_offset /= 300.0f;
-  806          //    origin_az_offset /= 300.0f;
-  807          //    origin_gx_offset /= 300.0f;
-  808          //    origin_gy_offset /= 300.0f;
-  809          //    origin_gz_offset /= 300.0f;
-  810          //}
-  811          
-  812          //void kalanma_data() {
-  813          //    float ax, ay, az;
-  814          //    float gx, gy, gz;
-  815          //    float sin_roll, cos_roll, sin_pitch, cos_pitch;
-  816          //    float acc_ax_adj, acc_ay_adj, acc_az_adj;
+  799          
+  800          /**
+  801           * @brief 根据 encoder_speedup_sign 更新 encoder_speedup_element 的值。
+  802           * 如果 sign 为 1, 则基于全局的 l_speed_now 和 r_speed_now 进行累加。
+  803           * 否则, 将 element 清零。
+  804           * * @param p_encoder_speedup_element 指向要更新的 encoder_speedup_element 变量的指针。
+  805           * @param current_encoder_speedup_sign 当前的 encoder_speedup_sign 标志位。
+  806           */
+  807          void update_encoder_speedup_value(float* p_encoder_speedup_element, 
+  808                                            int current_encoder_speedup_sign) 
+  809          {
+  810   1          if (current_encoder_speedup_sign == 1) {
+  811   2      
+  812   2              *p_encoder_speedup_element += (fabs(l_speed_now) + fabs(r_speed_now)) * 0.5f * 0.00003895f;
+  813   2          } else {
+  814   2              *p_encoder_speedup_element = 0.0f;
+  815   2          }
+  816   1      }
   817          
-  818          //    imu660ra_get_acc();
-  819          //    imu660ra_get_gyro();
-  820          
-  821          //    ax = imu660ra_acc_transition(imu660ra_acc_x);
-  822          //    ay = imu660ra_acc_transition(imu660ra_acc_y);
-  823          //    az = imu660ra_acc_transition(imu660ra_acc_z);
-  824          
-  825          //    gx = imu660ra_gyro_transition(imu660ra_gyro_x);
-  826          //    gy = imu660ra_gyro_transition(imu660ra_gyro_y);
-  827          //    gz = imu660ra_gyro_transition(imu660ra_gyro_z);
-  828          
-  829          //    sin_roll = (float)sin(k_roll / rad2deg);
-  830          //    cos_roll = (float)cos(k_roll / rad2deg);
-  831          //    sin_pitch = (float)sin(k_pitch / rad2deg);
-  832          //    cos_pitch = (float)cos(k_pitch / rad2deg);
+  818          
+  819          void update_gyro_angle_accumulator(float* p_angle_accumulator,
+  820                                             int sign_flag)
+  821          {
+  822   1          if (sign_flag == 1) {
+  823   2              // 假设 gyro_data[0] 在此是可访问的
+  824   2              *p_angle_accumulator += gyro_data[0] * 0.005f;
+  825   2          } else {
+  826   2              *p_angle_accumulator = 0.0f;
+  827   2          }
+  828   1      }
+  829          
+  830          
+  831          
+  832          
   833          
-  834          //    roll_v = (gx - origin_gx_offset)
-  835          //           + (sin_pitch * sin_roll / cos_pitch) * (gy - origin_gy_offset)
-C251 COMPILER V5.60.0,  control                                                            08/06/25  09:32:11  PAGE 14  
-
-  836          //           + (sin_pitch * cos_roll / cos_pitch) * (gz - origin_gz_offset);
-  837          //    pitch_v = cos_roll * (gy - origin_gy_offset) - sin_roll * (gz - origin_gz_offset);
-  838          //    yaw_v = (sin_roll / cos_pitch) * (gy - origin_gy_offset)
-  839          //          + (cos_roll / cos_pitch) * (gz - origin_gz_offset);
-  840          
-  841          //    roll_v /= 100.0f;
-  842          //    pitch_v /= 100.0f;
-  843          //    yaw_v /= 100.0f;
-  844          
-  845          //    gyro_roll_my = k_roll + dt_my * roll_v;
-  846          //    gyro_pitch_my = k_pitch + dt_my * pitch_v;
-  847          //    gyro_yaw = k_yaw / 30.0f + dt_my * (yaw_v + 0.2f);  /* 做角度补偿 */
-  848          
-  849          //    /* Step 2: 计算先验误差协方差矩阵 */
-  850          //    e_P[0][0] += 0.0025f;
-  851          //    e_P[1][1] += 0.0025f;
-  852          
-  853          //    /* Step 3: 更新卡尔曼增益K */
-  854          //    k_k[0][0] = e_P[0][0] / (e_P[0][0] + 0.3f);
-  855          //    k_k[1][1] = e_P[1][1] / (e_P[1][1] + 0.3f);
-  856          
-  857          //    /* Step 4: 计算观测状态 */
-  858          //    acc_ax_adj = ax - origin_ax_offset;
-  859          //    acc_ay_adj = ay - origin_ay_offset;
-  860          //    acc_az_adj = az - origin_az_offset;
-  861          
-  862          //    acc_roll = (float)(atan2(acc_ay_adj, acc_az_adj) * rad2deg);
-  863          //    acc_pitch = (float)(-atan2(acc_ax_adj,
-  864          //        sqrt(acc_ay_adj * acc_ay_adj + acc_az_adj * acc_az_adj)) * rad2deg);
-  865          
-  866          //    k_roll = gyro_roll_my + k_k[0][0] * (acc_roll - gyro_roll_my);
-  867          //    k_pitch = gyro_pitch_my + k_k[1][1] * (acc_pitch - gyro_pitch_my);
-  868          //    k_yaw = 30.0f * gyro_yaw;
-  869          
-  870          //    /* Step 5: 更新协方差矩阵 */
-  871          //    e_P[0][0] *= (1.0f - k_k[0][0]);
-  872          //    e_P[1][1] *= (1.0f - k_k[1][1]);
-  873          //}
-  874          
-  875          ///* 初始化矩阵变量（必须单独写） */
-  876          //void init_kalman() {
-  877          //    e_P[0][0] = 1.0f; e_P[0][1] = 0.0f;
-  878          //    e_P[1][0] = 0.0f; e_P[1][1] = 1.0f;
-  879          
-  880          //    k_k[0][0] = 0.0f; k_k[0][1] = 0.0f;
-  881          //    k_k[1][0] = 0.0f; k_k[1][1] = 0.0f;
-  882          //}
-  883          
-  884          
-  885          
-  886          
-  887          
-  888          
-  889          /**
-  890           * @brief 根据 encoder_speedup_sign 更新 encoder_speedup_element 的值。
-  891           * 如果 sign 为 1, 则基于全局的 l_speed_now 和 r_speed_now 进行累加。
-  892           * 否则, 将 element 清零。
-  893           * * @param p_encoder_speedup_element 指向要更新的 encoder_speedup_element 变量的指针。
-  894           * @param current_encoder_speedup_sign 当前的 encoder_speedup_sign 标志位。
-  895           */
-  896          void update_encoder_speedup_value(float* p_encoder_speedup_element, 
-  897                                            int current_encoder_speedup_sign) 
-  898          {
-  899   1          if (current_encoder_speedup_sign == 1) {
-  900   2      
-  901   2              *p_encoder_speedup_element += (fabs(l_speed_now) + fabs(r_speed_now)) * 0.5f * 0.00003895f;
-C251 COMPILER V5.60.0,  control                                                            08/06/25  09:32:11  PAGE 15  
-
-  902   2          } else {
-  903   2              *p_encoder_speedup_element = 0.0f;
-  904   2          }
-  905   1      }
-  906          
-  907          
-  908          void update_gyro_angle_accumulator(float* p_angle_accumulator,
-  909                                             int sign_flag)
-  910          {
-  911   1          if (sign_flag == 1) {
-  912   2              // 假设 gyro_data[0] 在此是可访问的
-  913   2              *p_angle_accumulator += gyro_data[0] * 0.005f;
-  914   2          } else {
-  915   2              *p_angle_accumulator = 0.0f;
-  916   2          }
-  917   1      }
-  918          
-  919          void change_para(){
-  920   1        
-  921   1          if(run_mode==1){
-  922   2          L_pid.kp=10.9;
-  923   2          L_pid.ki=0.65;
-  924   2          L_pid.kd=0;
-  925   2           
-  926   2          R_pid.kp=10.9;
-  927   2          R_pid.ki=0.65;
-  928   2          R_pid.kd=0;
-  929   2          
-  930   2          //  error = (left_mag - right_mag) / (left_mag + right_mag);
-  931   2          Turn_PID.kp=144;
-  932   2          Turn_PID.ki=76.1;
-  933   2          Turn_PID.kd=56;
-  934   2          Turn_PID.kp1=0.54;
-  935   2          dir_loop_limit=120; 
-  936   2          }
-  937   1          
-  938   1          else if(run_mode==2){
-  939   2          L_pid.kp=4.9;
-  940   2          L_pid.ki=0.2;
-  941   2          L_pid.kd=0;
-  942   2           
-  943   2          R_pid.kp=4.9;
-  944   2          R_pid.ki=0.2;
-  945   2          R_pid.kd=0;
-  946   2      
-  947   2          Turn_PID.kp=194;
-  948   2          Turn_PID.ki=66.1;
-  949   2          Turn_PID.kd=66;
-  950   2          Turn_PID.kp1=0.34;
-  951   2            
-  952   2          dir_loop_limit=48; 
-  953   2          dir_enlarge=15.5;  
-  954   2          
-  955   2          }
-  956   1      
-  957   1      
-  958   1      
-  959   1      }
-  960          
-  961          
-  962          
-  963          
-  964          
-  965          
-  966          
-  967          
-C251 COMPILER V5.60.0,  control                                                            08/06/25  09:32:11  PAGE 16  
-
+  834          
+  835          
 
 
 Module Information          Static   Overlayable
 ------------------------------------------------
-  code size            =      2975     ------
+C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 14  
+
+  code size            =      1953     ------
   ecode size           =    ------     ------
   data size            =    ------     ------
   idata size           =    ------     ------
   pdata size           =    ------     ------
   xdata size           =    ------     ------
   xdata-const size     =    ------     ------
-  edata size           =       328     ------
+  edata size           =       270     ------
   bit size             =    ------     ------
   ebit size            =    ------     ------
   bitaddressable size  =    ------     ------
@@ -1039,7 +900,7 @@ Module Information          Static   Overlayable
   far data size        =    ------     ------
   huge data size       =    ------     ------
   const size           =    ------     ------
-  hconst size          =       262     ------
+  hconst size          =       238     ------
 End of Module Information.
 
 

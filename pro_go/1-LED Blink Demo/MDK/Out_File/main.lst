@@ -1,4 +1,4 @@
-C251 COMPILER V5.60.0,  main                                                               08/06/25  08:57:48  PAGE 1   
+C251 COMPILER V5.60.0,  main                                                               21/06/25  16:55:52  PAGE 1   
 
 
 C251 COMPILER V5.60.0, COMPILATION OF MODULE main
@@ -15,264 +15,207 @@ stmt  level    source
     3          #include "headfile.h"
     4          
     5          
-    6          
-    7          
-    8          #define BEEP P67
-    9          #define ON 1
-   10          #define OFF 0
-   11          
-   12              ////////////////////////////////////////***************��ʱ����***************/////////////
+    6              ////////////////////////////////////////***************��ʱ����***************/////////////
              -///////////////////////////
-   13          
-   14          uint8 key_value;
-   15          int8 key_mode=-1;                 
-   16          uint8 menu_sign=9;
-   17          uint8 display_mode=0;
+    7          
+    8          uint8 key_value;
+    9          int8 key_mode=-1;                 
+   10          uint8 menu_sign=9;
+   11          uint8 display_mode=0;
+   12          
+   13          //电池adc采集
+   14          float vbat_in=0;
+   15          float adc_vbat=0;
+   16          
+   17          
    18          
-   19          //电池adc采集
-   20          float vbat_in=0;
-   21          float adc_vbat=0;
-   22          
-   23          
-   24          
-   25          
-   26              ////////////////////////////////////////***************修车指南***************/////////////////////
+   19          
+   20              ////////////////////////////////////////***************修车指南***************/////////////////////
              -///////////////////
-   27              //甩尾看方向环
-   28          
-   29          void main()
-   30          {
-   31   1      
-   32   1        
-   33   1      //    L_pid.kp=4.9;
-   34   1      //    L_pid.ki=0.25;
-   35   1      //    L_pid.kd=0;
-   36   1      //     
-   37   1      //    R_pid.kp=4.9;
-   38   1      //    R_pid.ki=0.25;
-   39   1      //    R_pid.kd=0;
+   21              //甩尾看方向环
+   22          
+   23          void main()
+   24          {
+   25   1      
+   26   1          L_pid.kp=10.9;
+   27   1          L_pid.ki=0.61;
+   28   1          L_pid.kd=0;
+   29   1           
+   30   1          R_pid.kp=10.9;
+   31   1          R_pid.ki=0.61;
+   32   1          R_pid.kd=0;
+   33   1          
+   34   1          //  error = (left_mag - right_mag) / (left_mag + right_mag);
+   35   1          Turn_PID.kp=174;
+   36   1          Turn_PID.ki=132;
+   37   1          Turn_PID.kd=56;
+   38   1          Turn_PID.kp1=0.54;
+   39   1        
    40   1      
-   41   1          L_pid.kp=10.9;
-   42   1          L_pid.ki=0.65;
-   43   1          L_pid.kd=0;
-   44   1           
-   45   1          R_pid.kp=10.9;
-   46   1          R_pid.ki=0.65;
-   47   1          R_pid.kd=0;
-   48   1          
-   49   1          //  error = (left_mag - right_mag) / (left_mag + right_mag);
-   50   1          Turn_PID.kp=144;
-   51   1          Turn_PID.ki=66.1;
-   52   1          Turn_PID.kd=56;
-   53   1          Turn_PID.kp1=0.54;
-   54   1        
-C251 COMPILER V5.60.0,  main                                                               08/06/25  08:57:48  PAGE 2   
+   41   1        
+   42   1        
+   43   1          Gyro_PID.kp=2.2;
+   44   1          Gyro_PID.ki=0.58;
+   45   1          Gyro_PID.kd=2;
+   46   1          Gyro_PID.kp1=0;
+   47   1        
+   48   1      
+   49   1          board_init();
+   50   1          adc_init(ADC_P11, ADC_SYSclk_DIV_2);    
+   51   1          delay_init(); 
+   52   1      
+   53   1          
+   54   1        ////////////////////////////////////////***************������***************////////////////
+C251 COMPILER V5.60.0,  main                                                               21/06/25  16:55:52  PAGE 2   
 
-   55   1          
-   56   1          ang_pid.kp=28;
-   57   1          ang_pid.ki=0;
-   58   1          ang_pid.kd=20;
-   59   1          ang_pid.kp1=0.54;
-   60   1        
-   61   1      
-   62   1          board_init();
-   63   1          adc_init(ADC_P11, ADC_SYSclk_DIV_2);    
-   64   1          delay_init(); 
-   65   1          
-   66   1      //    while(1) {
-   67   1      //      vbat_in=adc_once(ADC_P11, ADC_12BIT);
-   68   1      //      adc_vbat = ((float)vbat_in / 4095.0f) * 3.3f * (10000.0f + 3000.0f) / 3000.0f;
-   69   1      
-   70   1      //      if (adc_vbat > 12.8f) {
-   71   1      //          pwm_state_charge=1;
-   72   1      //          pwm_state=1;
-   73   1      
-   74   1      //          break; // 电压达标，跳出等待循环
-   75   1      //      }
-   76   1      //    }
-   77   1          
-   78   1        ////////////////////////////////////////***************������***************////////////////
              -////////////////////////
-   79   1          imu660ra_init();
-   80   1          lcd_init();     
-   81   1          delay_init();
-   82   1          #if 1
-   83   1          pit_timer_ms(TIM_1,5);        
-   84   1          #endif
-   85   1          
-   86   1          adc_init(ADC_P00, ADC_SYSclk_DIV_2);  
-   87   1          adc_init(ADC_P01, ADC_SYSclk_DIV_2);  
-   88   1          adc_init(ADC_P10, ADC_SYSclk_DIV_2);    
-   89   1          adc_init(ADC_P05, ADC_SYSclk_DIV_2);    
-   90   1          adc_init(ADC_P06, ADC_SYSclk_DIV_2);    
-   91   1          delay_ms(10);
-   92   1      
-   93   1          ctimer_count_init(MOTOR1_ENCODER);
-   94   1          ctimer_count_init(MOTOR2_ENCODER);
-   95   1          delay_ms(10);
-   96   1      
-   97   1          pwm_init(PWMA_CH2P_P62, 17000, 0);
-   98   1          pwm_init(PWMA_CH1P_P60, 17000, 0);
-   99   1          pwm_init(PWMA_CH4P_P66, 17000, 0);
-  100   1          pwm_init(PWMA_CH3P_P64, 17000, 0);
-  101   1          delay_ms(10);
-  102   1          
-  103   1          wireless_uart_init();
-  104   1          
-  105   1            
-  106   1          gpio_mode(P2_6,GPO_PP);
-  107   1          gpio_mode(P7_4,GPO_PP);
-  108   1          gpio_mode(P0_7,GPO_PP);
-  109   1          gpio_mode(P5_2,GPO_PP);   
-  110   1      
-  111   1      
-  112   1      
-  113   1          L_pid.Target_base = 251; // 设置左电机的目标速度
-  114   1          R_pid.Target_base = 251;
-  115   1          
-  116   1          
-  117   1          L_pid.Target = 230; // 设置左电机的目标速度
-  118   1          R_pid.Target = 230;
-  119   1      
-C251 COMPILER V5.60.0,  main                                                               08/06/25  08:57:48  PAGE 3   
+   55   1          imu660ra_init();
+   56   1          lcd_init();     
+   57   1          delay_init();
+   58   1          
+   59   1          //flash
+   60   1      //    iap_init();                     
+   61   1      //    load_all_params_from_flash();
+   62   1          
+   63   1          #if 1
+   64   1          pit_timer_ms(TIM_1,5);        
+   65   1          pit_timer_ms(TIM_4, 10);      
+   66   1          #endif
+   67   1          
+   68   1          init();
+   69   1          
+   70   1          change_speed_Target_base(260);
+   71   1          
+   72   1      
+   73   1          P52=0;
+   74   1      
+   75   1      
+   76   1      
+   77   1      
+   78   1      
+   79   1        while(1)
+   80   1        {
+   81   2      
+   82   2      
+   83   2            #if 1
+   84   2        
+   85   2            if(pwm_state==0)  lcd_showstr(82, 9, " stop");
+   86   2            if(pwm_state==1)  lcd_showstr(82, 9, " gogo");
+   87   2            if(pwm_state==2)  lcd_showstr(82, 9, " clean");
+   88   2      
+   89   2            key_value = key_scan(1);
+   90   2            current_key = key_scan(1); 
+   91   2      
+   92   2              // 向下翻页 (key_value == 4)
+   93   2              if (key_value == 4) {
+   94   3                  lcd_clear(WHITE); // 清屏操作，可以根据需求放置
+   95   3                  // 如果当前是最后一项，则回到第一项 (0)
+   96   3                  if (key_mode >= (menu_sign - 1)) { 
+   97   4                      key_mode = 0;
+   98   4                  } else { // 否则，切换到下一项
+   99   4                      key_mode++;
+  100   4                  }
+  101   3              }
+  102   2              // 向上翻页 (key_value == 1)
+  103   2              else if (key_value == 1) { // 注意这里是 else if，确保了 key_value 不会同时满足 4 和 
+             -1
+  104   3                  lcd_clear(WHITE); // 清屏操作，可以根据需求放置
+  105   3                  // 如果当前是第一项 (0)，则回到最后一项 (menu_sign - 1)
+  106   3                  if (key_mode <= 0) {
+  107   4                      key_mode = (menu_sign - 1);
+  108   4                  } else { // 否则，切换到前一项
+  109   4                      key_mode--;
+  110   4                  }
+  111   3              }
+  112   2            
+  113   2      
+  114   2                
+  115   2      //        if (key_value == 4) {
+  116   2      //          save_all_params_to_flash();
+  117   2      //          lcd_showstr(0, 9, "SAVE");
+  118   2      //        }
+C251 COMPILER V5.60.0,  main                                                               21/06/25  16:55:52  PAGE 3   
 
-  120   1          P52=0;
-  121   1      
-  122   1        while(1)
-  123   1        {
-  124   2      
-  125   2      
-  126   2            #if 1
-  127   2        
-  128   2          if(pwm_state==0)  lcd_showstr(82, 9, " stop");
-  129   2          if(pwm_state==1) {
-  130   3          
-  131   3           lcd_showstr(82, 9, " gogo");
-  132   3          
-  133   3          }
-  134   2          if(pwm_state==2)  lcd_showstr(82, 9, " clean");
-  135   2      
-  136   2      
-  137   2          key_value=key_scan(1);
-  138   2          current_key=key_scan(1);
-  139   2          if(key_value==4){
-  140   3            lcd_clear(WHITE);
-  141   3              if(key_mode++ >=(menu_sign - 1))key_mode=0;
+  119   2      
+  120   2              
+  121   2          
+  122   2            switch (key_mode) {
+  123   3            case 0: display_submenu_check(); break;
+  124   3              
+  125   3            case 1: display_motor(&L_pid,l_speed_now,current_l_pwm_duty, key_value,0); break;
+  126   3              
+  127   3            case 2: display_motor(&R_pid,r_speed_now,current_r_pwm_duty, key_value,1); break;
+  128   3              
+  129   3            case 3: display_t(); break;
+  130   3              
+  131   3            case 4: display_submenu_ee(); break;
+  132   3              
+  133   3            case 5: display_gyro(key_value);break;
+  134   3            
+  135   3            case 6: display_g();break;  
+  136   3            
+  137   3            case 7: display_straight_param();break;   
+  138   3              
+  139   3            default:
+  140   3      
+  141   3      
   142   3      
-  143   3          } else if(key_value==4) {
-  144   3            if(key_mode-- <= 0) key_mode = (menu_sign - 1);
-  145   3          }
-  146   2          
-  147   2          
-  148   2          
-  149   2            switch (key_mode) {
-  150   3            case 0: display_submenu_check(); break;
-  151   3              
-  152   3            case 1: display_motor(&L_pid,l_speed_now,current_l_pwm_duty,"leftt", key_value); break;
-  153   3              
-  154   3            case 2: display_motor(&R_pid,r_speed_now,current_r_pwm_duty,"right", key_value); break;
-  155   3              
-  156   3            case 3: display_t(); break;
-  157   3              
-  158   3            case 4: display_submenu_ee(); break;
-  159   3              
-  160   3            case 5: display_gyro(key_value);break;
-  161   3              
-  162   3            case 6: 
-  163   3            lcd_showfloat(0,6,ang_pid.out,4,1);
-  164   3            lcd_showfloat(70,7,current_angle,4,1);
-  165   3            lcd_showfloat(0,7,encoder_charge_element,4,1);
-  166   3            lcd_showfloat(0,8,cir_flag,2,2);
-  167   3            lcd_showfloat(70,8,encoder_charge_sign,2,2);
-  168   3      
-  169   3            lcd_showfloat(0,9,ring_out_element,4,1);
-  170   3            break;  
-  171   3            
-  172   3            case 7: 
-  173   3            lcd_showfloat(0,0,gyro_roll_cross,4,1);
-  174   3            break;  
-  175   3            
-  176   3            
-  177   3            default:
-  178   3            lcd_showstr(0, 0, "shit");
-  179   3            lcd_showfloat(0,1,cross_flag,4,1);
-  180   3            
-  181   3            lcd_showfloat(55,1,temp_flag_speed,4,1);
-  182   3            lcd_showstr(95, 1, "temp");
-  183   3      
-  184   3            lcd_showfloat(0,2,Turn_PID.err,4,1);
-  185   3            lcd_showfloat(0,3,gyro_roll_cross,4,1);
-C251 COMPILER V5.60.0,  main                                                               08/06/25  08:57:48  PAGE 4   
-
-  186   3            
-  187   3            
-  188   3            lcd_showfloat(0,4,run_mode,4,1);
-  189   3            lcd_showstr(70, 4, "mode");
-  190   3      
-  191   3            lcd_showfloat(0,5,P36,4,1);
-  192   3      
-  193   3            
-  194   3            lcd_showfloat(0,6,encoder_speedup_element,4,1);
-  195   3            lcd_showstr(70, 6, "element");
-  196   3            
-  197   3            lcd_showfloat(0,7,L_pid.Target_base,4,0);
-  198   3            lcd_showfloat(45,7,R_pid.Target_base,4,0);
-  199   3            lcd_showstr(95, 7, "base");
-  200   3            
-  201   3      
-  202   3            lcd_showfloat(0,8,L_pid.Target,4,0);
-  203   3            lcd_showfloat(45,8,R_pid.Target,4,0);
-  204   3            lcd_showstr(95, 8, "Tar");
-  205   3            lcd_showfloat(0,9,mot_inc,4,1);
-  206   3      
-  207   3            break;
-  208   3            }
-  209   2          
-  210   2          
-  211   2      
-  212   2            #endif
-  213   2          
-  214   2          
-  215   2          
-  216   2            #if 0
-                       L_pid.kp=R_pid.kp;
-                       L_pid.ki=R_pid.ki;
-                       L_pid.kd=R_pid.kd;
-                       L_pid.Target=R_pid.Target;
+  143   3              lcd_show_font(60, 20, 32, 32, Tang_32x32, BLACK, WHITE);
+  144   3              lcd_show_font(60, 60, 32, 32, Hua_32x32, BLACK, WHITE);
+  145   3              lcd_show_font(90, 50, 32, 32, Wei_32x32, BLACK, WHITE);
+  146   3              lcd_show_font(90, 90, 32, 32, Mian_32x32, BLACK, WHITE);
+  147   3      
+  148   3            
+  149   3            
+  150   3            
+  151   3              break;
+  152   3            }
+  153   2          
+  154   2          
+  155   2      
+  156   2            #endif
+  157   2          
+  158   2          
+  159   2          
+  160   2            #if 0
                
-                       vofa_send_data[0] = l_speed_now;
-                       vofa_send_data[1] = r_speed_now;
-                       vofa_send_data[2] =current_l_pwm_duty;
-                       vofa_send_data[3] =current_r_pwm_duty;
-                       vofa_send_data[4] =L_pid.Target;
                
-                        vodka_JustFloat_send(vofa_send_data, 5);
+                       vofa_send_data[0] = L;
+                       vofa_send_data[1] = R;
+                       vofa_send_data[2] = LM;
+                       vofa_send_data[3] = RM;
+                       vofa_send_data[4] = MID;
+                       vofa_send_data[5] = error;
+                     
+                       vodka_JustFloat_send(vofa_send_data, 6);
                       #endif
-  230   2           
-  231   2           
-  232   2      
-  233   2            
-  234   2            
-  235   2            
-  236   2      
-  237   2          }
-  238   1      
-  239   1      
-  240   1      }
-  241          
+  172   2           
+  173   2            
+  174   2            
+  175   2           
+  176   2      
+  177   2            
+  178   2            
+  179   2            
+  180   2      
+  181   2          }
+  182   1      
+  183   1      
+  184   1      }
+C251 COMPILER V5.60.0,  main                                                               21/06/25  16:55:52  PAGE 4   
+
+  185          
 
 
 Module Information          Static   Overlayable
 ------------------------------------------------
-  code size            =      1358     ------
+  code size            =       731     ------
   ecode size           =    ------     ------
   data size            =    ------     ------
   idata size           =    ------     ------
   pdata size           =    ------     ------
   xdata size           =    ------     ------
   xdata-const size     =    ------     ------
-C251 COMPILER V5.60.0,  main                                                               08/06/25  08:57:48  PAGE 5   
-
   edata size           =        12     ------
   bit size             =    ------     ------
   ebit size            =    ------     ------
@@ -281,7 +224,7 @@ Module Information          Static   Overlayable
   far data size        =    ------     ------
   huge data size       =    ------     ------
   const size           =    ------     ------
-  hconst size          =        94     ------
+  hconst size          =        50     ------
 End of Module Information.
 
 

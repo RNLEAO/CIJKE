@@ -109,9 +109,7 @@ void USART_PID_Adjust()
 {
      data_Get = Get_Data(); // 存放接收到的数据
 	
-//    printf("data=%.2f\r\n",data_Get);
-//    if(mode == 1)//循迹环
-//    {
+
 	
 				#if 0
             if(DataBuff[0]=='P' && DataBuff[1]=='2') // 速度环P
@@ -130,7 +128,7 @@ void USART_PID_Adjust()
 
 				#endif
 	
-				#if 1
+				#if 0
         if(DataBuff[0]=='P' && DataBuff[1]=='2') // 速度环P
             R_pid.kp = data_Get;
         else if(DataBuff[0]=='I' && DataBuff[1]=='2') // 速度环I
@@ -168,6 +166,32 @@ void USART_PID_Adjust()
 
 
 				#endif
+				
+				
+				
+				
+				#if 1
+            if(DataBuff[0]=='P' && DataBuff[1]=='2') // 速度环P
+            Gyro_PID.kp = data_Get;
+            else if(DataBuff[0]=='I' && DataBuff[1]=='2') // 速度环I
+            Gyro_PID.ki = data_Get;
+            else if(DataBuff[0]=='D' && DataBuff[1]=='2') // 速度环D
+            Gyro_PID.kd = data_Get;
+						else if((DataBuff[0]=='p' && DataBuff[1]=='t'))
+						Gyro_PID.kp1 = data_Get;
+
+				#endif
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
 				
 }
 

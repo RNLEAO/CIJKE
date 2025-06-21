@@ -39,6 +39,14 @@ extern float r_pwm_duty ;
 extern float current_l_pwm_inc;
 extern float current_r_pwm_inc;
 
+extern float current_l_pwm_inc_last;
+extern float current_r_pwm_inc_last;
+
+extern float l_pwm_inc_raw;
+extern float r_pwm_inc_raw;
+
+
+
 extern float mid_dynamic_weight;
 
 //积分开关
@@ -61,15 +69,33 @@ extern float encoder_cross_element;
 //十字编码器积分开关
 extern char time_speedup_sign;
 extern float time_speedup_element;
-
+//长直道积分开关
+extern char encoder_straight_sign;
+extern float encoder_straight_element;
 
 extern float dir_loop_limit; //方向环限幅
 extern float dir_enlarge;  		//方向环pid放大系数
+extern float speed_damping; // 速度抑制系数
+
 extern float err_H;
 extern float err_X;
 extern float err_HM;
-extern float err_d;
+extern float err_D;
 extern float err_M;
+
+
+
+
+
+extern float error; 
+
+
+
+extern float LM_x;  
+extern float RM_x;  
+extern float LM_y;  
+extern float RM_y;  
+
 
 
 extern float gyro_roll_sign_cross;

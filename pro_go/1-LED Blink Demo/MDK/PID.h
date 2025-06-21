@@ -8,7 +8,7 @@ typedef struct{
        float kd;
        float kp1;
        float kp2;
-				float kd2;
+			 float kd2;
 
        int limit_max;
        int limit_min;
@@ -21,7 +21,7 @@ typedef struct{
        float err_sum;
        float err_last;
 			 float d_err;
-			float last;
+			 float last;
 
        float out;
        float integral_out;
@@ -43,8 +43,8 @@ extern _PID ang_pid;  // ×óµç»úPID¿ØÖÆÆ÷
 
 float IncPID(float Encoder, float Target, _PID* sptr);
 float PositionPID(float Encoder, float Target, _PID* sptr);
-						 
-//void f_Integral_Limit(_PID* sptr);
-//void f_Output_Limit(_PID* sptr);
+float GyroPositionPID(float gyro_now, float Target, _PID* sptr);						 
+float turn_PstPID(float turn_error, _PID* sptr);
+
 
 #endif

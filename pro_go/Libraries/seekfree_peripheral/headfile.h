@@ -57,7 +57,7 @@
 #include "MATH.h"
 #include "vofa.h"
 #include "element.h"
-#include "Dma.H"
+#include "out_control.H"
 
 
 	//·äÃùÆ÷
