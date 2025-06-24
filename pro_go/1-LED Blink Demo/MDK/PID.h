@@ -45,6 +45,8 @@ float IncPID(float Encoder, float Target, _PID* sptr);
 float PositionPID(float Encoder, float Target, _PID* sptr);
 float GyroPositionPID(float gyro_now, float Target, _PID* sptr);						 
 float turn_PstPID(float turn_error, _PID* sptr);
+void PID_Set_turn(_PID* sptr, float p, float i, float d, float p1);
+void PID_Set_inc(_PID* sptr, float p, float i, float d);
 
 
 #endif

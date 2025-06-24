@@ -1,4 +1,4 @@
-C251 COMPILER V5.60.0,  element                                                            21/06/25  16:41:55  PAGE 1   
+C251 COMPILER V5.60.0,  element                                                            24/06/25  15:45:11  PAGE 1   
 
 
 C251 COMPILER V5.60.0, COMPILATION OF MODULE element
@@ -66,7 +66,7 @@ stmt  level    source
    52   3              }
    53   2              else if (L_raw >R_raw && cir_angle_flag != 1)
    54   2              {
-C251 COMPILER V5.60.0,  element                                                            21/06/25  16:41:55  PAGE 2   
+C251 COMPILER V5.60.0,  element                                                            24/06/25  15:45:11  PAGE 2   
 
    55   3                  cir_angle_flag = 2;//右入环
    56   3      
@@ -134,7 +134,7 @@ stmt  level    source
   117   3                gyro_roll_sign_rign=0;
   118   3                encoder_sign=0;
   119   3                mot_inc_element=0;
-C251 COMPILER V5.60.0,  element                                                            21/06/25  16:41:55  PAGE 3   
+C251 COMPILER V5.60.0,  element                                                            24/06/25  15:45:11  PAGE 3   
 
   120   3                gyro_roll=0;
   121   3                time_speedup_sign=1;
@@ -202,7 +202,7 @@ stmt  level    source
   182   3                  hall_triggered = 1;         // 开始1秒冷却
   183   3                  hall_timer_count = 0;       // 重置计数器
   184   3                
-C251 COMPILER V5.60.0,  element                                                            21/06/25  16:41:55  PAGE 4   
+C251 COMPILER V5.60.0,  element                                                            24/06/25  15:45:11  PAGE 4   
 
   185   3              }
   186   2          }
@@ -271,7 +271,7 @@ Module Information          Static   Overlayable
   code size            =       951     ------
   ecode size           =    ------     ------
   data size            =    ------     ------
-C251 COMPILER V5.60.0,  element                                                            21/06/25  16:41:55  PAGE 5   
+C251 COMPILER V5.60.0,  element                                                            24/06/25  15:45:11  PAGE 5   
 
   idata size           =    ------     ------
   pdata size           =    ------     ------

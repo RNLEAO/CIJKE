@@ -1,4 +1,4 @@
-C251 COMPILER V5.60.0,  PID                                                                21/06/25  16:41:53  PAGE 1   
+C251 COMPILER V5.60.0,  PID                                                                24/06/25  15:45:11  PAGE 1   
 
 
 C251 COMPILER V5.60.0, COMPILATION OF MODULE PID
@@ -66,7 +66,7 @@ stmt  level    source
    54                    sptr - PID控制器结构体指针
    55          返回值：PID控制输出值
    56          **************************************************************************/
-C251 COMPILER V5.60.0,  PID                                                                21/06/25  16:41:53  PAGE 2   
+C251 COMPILER V5.60.0,  PID                                                                24/06/25  15:45:11  PAGE 2   
 
    57          float PositionPID(float Encoder, float Target, _PID* sptr)
    58          {
@@ -134,7 +134,7 @@ stmt  level    source
   120   1          deadzone = 1.0f;  // 1 deg/s 死区
   121   1          if (fabs(sptr->err) < deadzone)
   122   1          {
-C251 COMPILER V5.60.0,  PID                                                                21/06/25  16:41:53  PAGE 3   
+C251 COMPILER V5.60.0,  PID                                                                24/06/25  15:45:11  PAGE 3   
 
   123   2              sptr->err = 0.0f;
   124   2          }
@@ -193,20 +193,52 @@ stmt  level    source
   177   1          return sptr->out;
   178   1      }
   179          
+  180          /**
+  181           * @brief  设置PID控制器的参数
+  182           * @param  sptr: 指向PID结构体的指针
+  183           * @param  p:    比例(Proportional)增益
+  184           * @param  i:    积分(Integral)增益
+  185           * @param  d:    微分(Derivative)增益
+  186           * @param  p1:   额外参数 (例如用于前馈或陀螺仪反馈的增益)
+  187           */
+  188          void PID_Set_turn(_PID* sptr, float p, float i, float d, float p1)
+C251 COMPILER V5.60.0,  PID                                                                24/06/25  15:45:11  PAGE 4   
+
+  189          {
+  190   1          // 将传入的参数值赋给结构体对应的成员
+  191   1          sptr->kp = p;
+  192   1          sptr->ki = i;
+  193   1          sptr->kd = d;
+  194   1          sptr->kp1 = p1;
+  195   1      }
+  196          
+  197          /**
+  198           * @brief  设置PID控制器的参数
+  199           * @param  sptr: 指向PID结构体的指针
+  200           * @param  p:    比例(Proportional)增益
+  201           * @param  i:    积分(Integral)增益
+  202           * @param  d:    微分(Derivative)增益
+  203           * @param  p1:   额外参数 (例如用于前馈或陀螺仪反馈的增益)
+  204           */
+  205          void PID_Set_inc(_PID* sptr, float p, float i, float d)
+  206          {
+  207   1          // 将传入的参数值赋给结构体对应的成员
+  208   1          sptr->kp = p;
+  209   1          sptr->ki = i;
+  210   1          sptr->kd = d;
+  211   1      }
 
 
 Module Information          Static   Overlayable
 ------------------------------------------------
-  code size            =      2107     ------
+  code size            =      2246     ------
   ecode size           =    ------     ------
   data size            =    ------     ------
   idata size           =    ------     ------
   pdata size           =    ------     ------
   xdata size           =    ------     ------
-C251 COMPILER V5.60.0,  PID                                                                21/06/25  16:41:53  PAGE 4   
-
   xdata-const size     =    ------     ------
-  edata size           =       532     ------
+  edata size           =       568     ------
   bit size             =    ------     ------
   ebit size            =    ------     ------
   bitaddressable size  =    ------     ------

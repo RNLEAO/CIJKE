@@ -177,3 +177,35 @@ float turn_PstPID(float turn_error,_PID* sptr)
     return sptr->out;
 }
 
+/**
+ * @brief  设置PID控制器的参数
+ * @param  sptr: 指向PID结构体的指针
+ * @param  p:    比例(Proportional)增益
+ * @param  i:    积分(Integral)增益
+ * @param  d:    微分(Derivative)增益
+ * @param  p1:   额外参数 (例如用于前馈或陀螺仪反馈的增益)
+ */
+void PID_Set_turn(_PID* sptr, float p, float i, float d, float p1)
+{
+    // 将传入的参数值赋给结构体对应的成员
+    sptr->kp = p;
+    sptr->ki = i;
+    sptr->kd = d;
+    sptr->kp1 = p1;
+}
+
+/**
+ * @brief  设置PID控制器的参数
+ * @param  sptr: 指向PID结构体的指针
+ * @param  p:    比例(Proportional)增益
+ * @param  i:    积分(Integral)增益
+ * @param  d:    微分(Derivative)增益
+ * @param  p1:   额外参数 (例如用于前馈或陀螺仪反馈的增益)
+ */
+void PID_Set_inc(_PID* sptr, float p, float i, float d)
+{
+    // 将传入的参数值赋给结构体对应的成员
+    sptr->kp = p;
+    sptr->ki = i;
+    sptr->kd = d;
+}

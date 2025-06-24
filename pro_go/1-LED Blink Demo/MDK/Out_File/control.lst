@@ -1,4 +1,4 @@
-C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 1   
+C251 COMPILER V5.60.0,  control                                                            24/06/25  15:45:10  PAGE 1   
 
 
 C251 COMPILER V5.60.0, COMPILATION OF MODULE control
@@ -66,7 +66,7 @@ stmt  level    source
    54   1      
    55   1          adc_init(ADC_P00, ADC_SYSclk_DIV_2);  
    56   1          adc_init(ADC_P01, ADC_SYSclk_DIV_2);  
-C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 2   
+C251 COMPILER V5.60.0,  control                                                            24/06/25  15:45:10  PAGE 2   
 
    57   1          adc_init(ADC_P10, ADC_SYSclk_DIV_2);    
    58   1          adc_init(ADC_P05, ADC_SYSclk_DIV_2);    
@@ -134,7 +134,7 @@ stmt  level    source
   120          **************************************************************************/
   121          uint8 current_key=0;
   122          uint8 last_key_state =0;
-C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 3   
+C251 COMPILER V5.60.0,  control                                                            24/06/25  15:45:10  PAGE 3   
 
   123          uint8 pwm_state = 0;      // 当前输出状态
   124          char pwm_state_charge = 0;      // 当前输出状态
@@ -202,7 +202,7 @@ stmt  level    source
   185   2              *parameter += step; // 按键 1：增加参数值
   186   2          } else if (key_value == 5) {
   187   2              *parameter -= step; // 按键 2：减少参数值
-C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 4   
+C251 COMPILER V5.60.0,  control                                                            24/06/25  15:45:10  PAGE 4   
 
   188   2               // 对于浮点数，通常不需要像 uint16_t 那样进行下限判断，因为 float 可以表示负数
   189   2               // 您可以根据具体需求添加下限或上限判断
@@ -270,7 +270,7 @@ stmt  level    source
   251          
   252          
   253          /**
-C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 5   
+C251 COMPILER V5.60.0,  control                                                            24/06/25  15:45:10  PAGE 5   
 
   254           * @brief 根据中间电感值计算动态权重。
   255           *
@@ -338,7 +338,7 @@ stmt  level    source
                    k *= 0.01f;
                    if (k < 0.0f) k = 0.0f;
                    if (k > 1.0f) k = 1.0f;
-C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 6   
+C251 COMPILER V5.60.0,  control                                                            24/06/25  15:45:10  PAGE 6   
 
                
                    return k;
@@ -406,7 +406,7 @@ stmt  level    source
   382          void buzzer_control_with_enable(float check_value, float abs_threshold, int enable_state)
   383          {
   384   1          // 检查两个条件：
-C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 7   
+C251 COMPILER V5.60.0,  control                                                            24/06/25  15:45:10  PAGE 7   
 
   385   1          // 1. 变量的绝对值是否达到阈值
   386   1          // 2. 蜂鸣器是否被启用 (enable_state == 1)
@@ -474,7 +474,7 @@ stmt  level    source
   446   1      
   447   1          if (avg_times == 0) {
   448   2              avg_times = 1;
-C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 8   
+C251 COMPILER V5.60.0,  control                                                            24/06/25  15:45:10  PAGE 8   
 
   449   2          }
   450   1      
@@ -542,7 +542,7 @@ stmt  level    source
   510   1          if (result < 0.0f)
   511   1          {
   512   2              result = 0.0f;
-C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 9   
+C251 COMPILER V5.60.0,  control                                                            24/06/25  15:45:10  PAGE 9   
 
   513   2          }
   514   1      
@@ -610,7 +610,7 @@ stmt  level    source
              - int enable_state) {
   575          //    // 检查两个条件：
   576          //    // 1. 监控值的绝对值是否达到或超过阈值
-C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 10  
+C251 COMPILER V5.60.0,  control                                                            24/06/25  15:45:10  PAGE 10  
 
   577          //    // 2. RGB LED 是否被启用 (enable_state == 1)
   578          //  
@@ -678,7 +678,7 @@ stmt  level    source
   640          //            case RGB_COLOR_RED:
   641          //                set_rgb_pins(1, 0, 1);
   642          //                break;
-C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 11  
+C251 COMPILER V5.60.0,  control                                                            24/06/25  15:45:10  PAGE 11  
 
   643          //            case RGB_COLOR_BLUE:
   644          //                set_rgb_pins(1, 1, 1);
@@ -746,7 +746,7 @@ stmt  level    source
   704          //        imu660ra_get_gyro();
   705          
   706          //        origin_ax_offset += imu660ra_acc_transition(imu660ra_acc_x);
-C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 12  
+C251 COMPILER V5.60.0,  control                                                            24/06/25  15:45:10  PAGE 12  
 
   707          //        origin_ay_offset += imu660ra_acc_transition(imu660ra_acc_y);
   708          //        origin_az_offset += imu660ra_acc_transition(imu660ra_acc_z);
@@ -814,7 +814,7 @@ stmt  level    source
   770          //    acc_ay_adj = ay - origin_ay_offset;
   771          //    acc_az_adj = az - origin_az_offset;
   772          
-C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 13  
+C251 COMPILER V5.60.0,  control                                                            24/06/25  15:45:10  PAGE 13  
 
   773          //    acc_roll = (float)(atan2(acc_ay_adj, acc_az_adj) * rad2deg);
   774          //    acc_pitch = (float)(-atan2(acc_ax_adj,
@@ -883,7 +883,7 @@ stmt  level    source
 
 Module Information          Static   Overlayable
 ------------------------------------------------
-C251 COMPILER V5.60.0,  control                                                            21/06/25  16:41:51  PAGE 14  
+C251 COMPILER V5.60.0,  control                                                            24/06/25  15:45:10  PAGE 14  
 
   code size            =      1953     ------
   ecode size           =    ------     ------

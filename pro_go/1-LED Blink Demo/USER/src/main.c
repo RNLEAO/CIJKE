@@ -10,11 +10,9 @@ int8 key_mode=-1;
 uint8 menu_sign=9;
 uint8 display_mode=0;
 
-//电池adc采集
-float vbat_in=0;
-float adc_vbat=0;
 
 
+extern int zhijiao_flag;
 
 
 		////////////////////////////////////////***************修车指南***************////////////////////////////////////////
@@ -23,19 +21,19 @@ float adc_vbat=0;
 void main()
 {
 
-		L_pid.kp=10.9;
-		L_pid.ki=0.61;
+		L_pid.kp=5.9;
+		L_pid.ki=0.41;
 		L_pid.kd=0;
 		 
-		R_pid.kp=10.9;
-		R_pid.ki=0.61;
+		R_pid.kp=5.9;
+		R_pid.ki=0.41;
 		R_pid.kd=0;
 		
 		//	error = (left_mag - right_mag) / (left_mag + right_mag);
 		Turn_PID.kp=174;
 		Turn_PID.ki=132;
 		Turn_PID.kd=56;
-		Turn_PID.kp1=0.54;
+		Turn_PID.kp1=0.64;
 	
 
 	
@@ -49,7 +47,19 @@ void main()
 		board_init();
 		adc_init(ADC_P11, ADC_SYSclk_DIV_2);	  
 		delay_init();	
+		
+		
+		//		while(1) {
+		//			vbat_in=adc_once(ADC_P11, ADC_12BIT);
+		//			adc_vbat = ((float)vbat_in / 4095.0f) * 3.3f * (10000.0f + 3000.0f) / 3000.0f;
 
+		//			if (adc_vbat > 12.8f) {
+		//					pwm_state_charge=1;
+		//					pwm_state=1;
+
+		//					break; // 电压达标，跳出等待循环
+		//			}
+		//    }
 		
 	////////////////////////////////////////***************������***************////////////////////////////////////////
 		imu660ra_init();
@@ -67,7 +77,7 @@ void main()
 		
 		init();
 		
-		change_speed_Target_base(260);
+		change_speed_Target_base(220);
 		
 
 		P52=0;
@@ -117,7 +127,13 @@ void main()
 //					lcd_showstr(0, 9, "SAVE");
 //				}
 
-				
+			vbat_in=adc_once(ADC_P11, ADC_12BIT);
+			adc_vbat = ((float)vbat_in / 4095.0f) * 3.3f * (10000.0f + 3000.0f) / 3000.0f;
+
+//			if (adc_vbat <= 7.8f) {
+//					pwm_state=0;
+//			}
+			
 		
 			switch (key_mode) {
 			case 0: display_submenu_check(); break;
@@ -157,10 +173,10 @@ void main()
 		
 		
 		
-			#if 0
+			#if 1
 
 
-				vofa_send_data[0] = L;
+				vofa_send_data[0] = zhijiao_flag;
 				vofa_send_data[1] = R;
 				vofa_send_data[2] = LM;
 				vofa_send_data[3] = RM;

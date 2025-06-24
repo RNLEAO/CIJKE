@@ -432,27 +432,29 @@ void display_submenu_check() {
 						
 					// 第 0 行：左电感 L
 					lcd_showstr(0, 0, "L:   ");
-					lcd_showuint16(36, 0, L);
+					lcd_showuint16(31, 0, L);
+	
+					lcd_showfloat(80, 0, adc_vbat, 3, 1);
 
 					// 第 1 行：右电感 R
 					lcd_showstr(0, 1, "R:   ");
-					lcd_showuint16(36, 1, R);
+					lcd_showuint16(31, 1, R);
 
 					// 第 2 行：左中电感 LM
 					lcd_showstr(0, 2, "LM:  ");
-					lcd_showuint16(36, 2, LM);
+					lcd_showuint16(31, 2, LM);
 
 					// 第 3 行：右中电感 RM
 					lcd_showstr(0, 3, "RM:  ");
-					lcd_showuint16(36, 3, RM);
+					lcd_showuint16(31, 3, RM);
 
 					// 第 4 行：中线电感 MID
 					lcd_showstr(0, 4, "MID: ");
-					lcd_showuint16(36, 4, MID);
+					lcd_showuint16(31, 4, MID);
 
 					// 第 5 行：电感总和
 					lcd_showstr(0, 5, "Sum: ");
-					lcd_showuint16(36, 5, L + R + LM + RM + MID);
+					lcd_showuint16(31, 5, L + R + LM + RM + MID);
 
 					// 第 6 行：当前路径误差
 					lcd_showstr(0, 6, "Err: ");

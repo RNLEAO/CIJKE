@@ -1,4 +1,4 @@
-C251 COMPILER V5.60.0,  vofa                                                               21/06/25  16:41:54  PAGE 1   
+C251 COMPILER V5.60.0,  vofa                                                               24/06/25  15:45:11  PAGE 1   
 
 
 C251 COMPILER V5.60.0, COMPILATION OF MODULE vofa
@@ -66,7 +66,7 @@ stmt  level    source
    50          
    51          uint8 RxBuffer[1];//串口接收缓冲
    52          uint16 RxLine = 0;//指令长度
-C251 COMPILER V5.60.0,  vofa                                                               21/06/25  16:41:54  PAGE 2   
+C251 COMPILER V5.60.0,  vofa                                                               24/06/25  15:45:11  PAGE 2   
 
    53          uint8 DataBuff[200];//指令内容
    54          float data_Get=0;//接收缓冲区
@@ -134,7 +134,7 @@ stmt  level    source
   114   1              #if 0
                            if(DataBuff[0]=='P' && DataBuff[1]=='2') // 速度环P
                            Turn_PID.kp = data_Get;
-C251 COMPILER V5.60.0,  vofa                                                               21/06/25  16:41:54  PAGE 3   
+C251 COMPILER V5.60.0,  vofa                                                               24/06/25  15:45:11  PAGE 3   
 
                            else if(DataBuff[0]=='I' && DataBuff[1]=='2') // 速度环I
                            Turn_PID.ki = data_Get;
@@ -202,7 +202,7 @@ stmt  level    source
   180   1                  else if((DataBuff[0]=='p' && DataBuff[1]=='t'))
   181   1                  Gyro_PID.kp1 = data_Get;
   182   1      
-C251 COMPILER V5.60.0,  vofa                                                               21/06/25  16:41:54  PAGE 4   
+C251 COMPILER V5.60.0,  vofa                                                               24/06/25  15:45:11  PAGE 4   
 
   183   1              #endif
   184   1              

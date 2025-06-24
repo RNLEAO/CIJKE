@@ -96,7 +96,9 @@ extern float RM_x;
 extern float LM_y;  
 extern float RM_y;  
 
-
+//µç³Øadc²É¼¯
+extern float vbat_in;
+extern float adc_vbat;
 
 extern float gyro_roll_sign_cross;
 extern float gyro_roll_cross;
