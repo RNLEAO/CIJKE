@@ -6,8 +6,8 @@
 		////////////////////////////////////////***************闂佽法鍠愰弸濠氬箯闁垮顦ч梺璺ㄥ枑閺嬪骞忛悜鑺ユ櫢闁哄倶鍊栫€?**************////////////////////////////////////////
 
 uint8 key_value;
-int8 key_mode=-1;                 
-uint8 menu_sign=12;
+int8 key_mode=0;                 
+uint8 menu_sign=13;
 uint8 display_mode=0;
 
 
@@ -130,10 +130,12 @@ void main()
         case 4:  display_submenu_ee(key_value); break;
         case 5:  display_gyro(key_value); break;
         case 6:  display_g(key_value); break;
-        case 7:  display_circle_debug_menu(key_value); break;
-        case 8:  display_circle_advanced_menu(key_value); break;
-        case 9:  display_speed_menu(key_value); break;
-        case 10: display_submenu_charge_debug(key_value); break;
+        case 7:  display_straight_param(key_value); break;
+        case 8:  display_right_angle_param(key_value); break;
+        case 9:  display_circle_debug_menu(key_value); break;
+        case 10: display_circle_advanced_menu(key_value); break;
+        case 11: display_speed_menu(key_value); break;
+        case 12: display_submenu_charge_debug(key_value); break;
         default:
             lcd_show_font(16, 56, 32, 32, Ci_32x32, BLACK, WHITE);
             lcd_show_font(48, 56, 32, 32, Jian_32x32, BLACK, WHITE);
@@ -201,9 +203,9 @@ void main()
 			
 			case 6: display_g(key_value);break;	
 			
-			case 7: display_straight_param();break;
+			case 7: display_straight_param(key_value);break;
 				
-			case 8: display_right_angle_param();break;		
+			case 8: display_right_angle_param(key_value);break;		
 			
 			case 9: display_circle_debug_menu(key_value);break;		
 				

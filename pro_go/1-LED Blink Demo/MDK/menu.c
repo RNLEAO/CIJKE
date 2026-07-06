@@ -798,6 +798,76 @@ void display_submenu_charge_debug(uint8 key_press) {
 }
 
 
+void display_straight_param(uint8 key_press)
+{
+    static unsigned char key_mode = 0;
+
+    if (key_press == KEY_EVENT_ITEM_NEXT)
+    {
+        lcd_clear(WHITE);
+        key_mode++;
+        if (key_mode >= 2) key_mode = 0;
+    }
+
+    switch (key_mode)
+    {
+        case 0:
+            adjust_parameter_by_key_float(key_press, &straight_err_threshold, (float)x_t_int * x_t_float);
+            break;
+        case 1:
+            adjust_parameter_by_key_float(key_press, &straight_integral_threshold, (float)x_t_int * x_t_float);
+            break;
+        default:
+            break;
+    }
+
+    lcd_showstr(0, 0, "Straight");
+    lcd_showfloat(70, 0, x_t_int * x_t_float, 2, 3);
+
+    lcd_showfloat(0, 1, straight_err_threshold, 2, 3);
+    lcd_showstr(60, 1, " Err_Th ");
+    lcd_showstr(120, 1, key_mode == 0 ? "<" : " ");
+
+    lcd_showfloat(0, 2, straight_integral_threshold, 2, 3);
+    lcd_showstr(60, 2, " Int_Th ");
+    lcd_showstr(120, 2, key_mode == 1 ? "<" : " ");
+
+    lcd_showfloat(0, 3, gyro_right_angle, 2, 3);
+    lcd_showstr(60, 3, " rtang ");
+
+    lcd_showfloat(0, 4, Turn_PID.err, 3, 3);
+    lcd_showstr(89, 4, " Err ");
+
+    lcd_showfloat(0, 5, encoder_straight_element, 3, 3);
+    lcd_showstr(89, 5, " Int ");
+
+    lcd_showstr(0, 7, "Flag:");
+    lcd_showfloat(50, 7, right_angle_flag, 1, 0);
+}
+
+void display_right_angle_param(uint8 key_press)
+{
+    (void)key_press;
+
+    lcd_showstr(0, 0, "RA Monitor");
+
+    lcd_showfloat(0, 2, right_angle_flag, 1, 0);
+    lcd_showstr(80, 2, "Flag");
+
+    lcd_showfloat(0, 3, gyro_roll_sign_angle, 1, 0);
+    lcd_showstr(80, 3, "G_SW");
+
+    lcd_showfloat(0, 4, gyro_right_angle, 3, 1);
+    lcd_showstr(45, 4, "/");
+    lcd_showfloat(55, 4, RIGHT_ANGLE_TARGET_ANGLE, 3, 0);
+    lcd_showstr(90, 4, "Ang");
+
+    lcd_showfloat(0, 5, right_angle_count, 3, 0);
+    lcd_showstr(45, 5, "/");
+    lcd_showfloat(55, 5, RIGHT_ANGLE_EXIT_COUNT, 3, 0);
+    lcd_showstr(90, 5, "Cnt");
+}
+
 float x_t_int=1;
 float x_t_float=0.2;
 /****************闂傚倷绀侀崥瀣偓绗涘懎鍨濋悘鐐垫櫕閺嗭箓鏌ｉ弮鍌氬付缂佲偓閸℃稒鐓曢柕澶涚到婵″ジ骞?***************//****************闂傚倷绀侀崥瀣偓绗涘懎鍨濋悘鐐垫櫕閺嗭箓鏌ｉ弮鍌氬付缂佲偓閸℃稒鐓曢柕澶涚到婵″ジ骞?***************//****************闂傚倷绀侀崥瀣偓绗涘懎鍨濋悘鐐垫櫕閺嗭箓鏌ｉ弮鍌氬付缂佲偓閸℃稒鐓曢柕澶涚到婵″ジ骞?***************/

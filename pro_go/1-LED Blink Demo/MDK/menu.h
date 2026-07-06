@@ -10,8 +10,8 @@ void display_gyro(uint8 key_press);
 void display_submenu_ee(uint8 key_press);
 void display_submenu_check(uint8 key_press);
 void display_g(uint8 key_press);
-void display_straight_param(void);
-void display_right_angle_param(void);
+void display_straight_param(uint8 key_press);
+void display_right_angle_param(uint8 key_press);
 void display_circle_debug_menu(uint8 key_press);
 void display_circle_advanced_menu(uint8 key_press);
 void display_speed_menu(uint8 key_press);
@@ -75,7 +75,6 @@ bit load_all_params_from_flash(void);
 
 
 #endif 
-
 
 
 
