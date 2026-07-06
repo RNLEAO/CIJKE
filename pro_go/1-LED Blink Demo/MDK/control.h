@@ -1,18 +1,18 @@
 #ifndef _CONTROL_H
 #define _CONTROL_H
 #include "headfile.h"
-//±àÂëÆ÷½Ó¿Ú¶¨Òå
-#define MOTOR1_ENCODER CTIM0_P34			//ZÏà
+// encoder interface
+#define MOTOR1_ENCODER CTIM0_P34
 #define MOTOR2_ENCODER CTIM3_P04
-#define MOTOR1_DIR P35								//dir·½Ïò
+#define MOTOR1_DIR P35
 #define MOTOR2_DIR P53
 
 
-//µç»ú½Ó¿Ú¶¨Òå
-#define MOTOR1 PWMA_CH2P_P62 //×ó  8701
+//é–»ãˆ çšå©§â‚¬é–¹æ’å„±è¤°æ¶šâ‚¬è§„çŸ®ç» ?
+#define MOTOR1 PWMA_CH2P_P62 //ç€¹? 8701
 #define MOTOR1_d P64
 
-#define MOTOR2 PWMA_CH1P_P60 //ÓÒ
+#define MOTOR2 PWMA_CH1P_P60
 #define MOTOR2_d P66
 
 
@@ -26,19 +26,18 @@
 #define  ang_limit 200
 
 
-uint8 key_scan(int mode);//°´¼üÉ¨Ãè
-float low_pass_filter(float current_value, float last_value, float alpha);//µÍÍ¨ÂË²¨
+uint8 key_scan(int mode);//é–¹ç¨¿î˜µéî…¢å¹é¡ï½…ä¼
+uint8 fetch_ui_key_event(void);
+float low_pass_filter(float current_value, float last_value, float alpha);//å¨´ï½…é…£éˆ§î„ç¢é¶ã‚…â–”?
+void adjust_parameter_by_key_float(uint8 key_value, float *parameter, float step);
+float Get_roll(void);
 
-void adjust_parameter_by_key_float(uint8 key_value, float *parameter, float step);//¸¡µãÊıµ÷Õû
-float Get_roll(void);//È¡roll
 
+extern int sample_count;
+extern int state;
 
-extern int sample_count;  //¼ÆÊıÆ÷£¬ÓÃÓÚÊÕ¼¯Ò»¶¨ÊıÁ¿µÄÊı¾İÀ´¼ÆËãÁãÆ¯¡£
-extern int state ;  		   // ×´Ì¬±êÖ¾£¬Ö¸Ê¾ÊÇ·ñÒÑ¾­¼ÆËãÍêÆ«ÒÆÁ¿
-
-// ÁãÆ«Öµ
-
-extern float gyro_data[1];  // ÍÓÂİÒÇÊı¾İ
+// é—‚å—šæ³›æµœæå´?
+extern float gyro_data[1];  // é—‚å‹¨å“é–¾æ˜æ¡¨é—åº¨å¼«é—å ç¥¦
 
 extern float gyro_roll,gyro_pitch;
 extern float roll_accel,pitch_accel;
@@ -46,32 +45,42 @@ extern float roll_accel,pitch_accel;
 
 extern float roll,pitch;
 extern float Angle_x ;
-/************½Ç¶È»·²ÎÊı**************/
-extern float current_angle;//µ±Ç°½Ç¶È
-extern float target_angle;//Ä¿±ê½Ç¶È
-extern float angle_error;//Îó²î
+/************éŸæ¬å¸’ç€¹æŠ½æ‚³é¡–æ°¬æ£˜é–º?*************/
+extern float current_angle;//ç‘œç‰ˆæŒ¸æ¾§çŠµæ†´éºæˆî†Š
+extern float target_angle;//é–»â•Šå–—é–ï½‡æ†´éºæˆî†Š
+extern float angle_error;//é å›¶å°å¦¯?
 extern float turn_control_output;
-extern float base_speed; // Ô­µØ×ªÏò£¬»ù´¡ËÙ¶ÈÉèÎª 0 
+extern float base_speed; // é–¸æ¨¼å–å©€å­˜æ½ªé¡’â‚¬é®æ»ˆæ•çç•Œå”¨ç»¾î…›å“é—î‚¤å–ç€¹å´‡æ‹‹é™ãƒ¨ç¤‹ 0 
 
-// º¯Êı£ºÈüµÀ±£»¤
-void track_protection(void); 
+void track_protection(void);
 extern uint8 current_key;
 extern uint8 last_key_state ;
-extern uint8 pwm_state ;      // µ±Ç°Êä³ö×´Ì¬
+extern uint8 pwm_state;
 extern uint8 Pwmout;
 
-extern char pwm_state_charge;      // µ±Ç°Êä³ö×´Ì¬
+extern char pwm_state_charge;      // ç‘œç‰ˆæŒ¸æ¾§çŠ³æ½é¾å†²æ¯‰é–»æ¨¿åŸ–éˆ§?
+uint8 key_scan_with_pwm(void);  // é–ºå›¨æ½™é®æ›¢å´¥æ´ï½†ç•±é–¸æˆ£å§¤é†?
 
-uint8 key_scan_with_pwm(void);  // ¸üÃûºóµÄº¯Êı
+#define KEY_EVENT_NONE        0
+#define KEY_EVENT_PAGE_PREV   1
+#define KEY_EVENT_ADJ_INC     2
+#define KEY_EVENT_ITEM_NEXT   3
+#define KEY_EVENT_PAGE_NEXT   4
+#define KEY_EVENT_ADJ_DEC     5
+#define KEY_EVENT_RUN_TOGGLE  6
+#define KEY_EVENT_SAVE_ALL    7
+#define KEY_EVENT_ENTER_CLEAN 8
 
-/*--------µç¸ĞËã·¨--------*/
-extern float L_raw,R_raw;//ºóÃæËÄ¸ö»¹Ã»ÓÃµ½
-extern float L,R,LM,RM,MID ;//ºóÃæËÄ¸ö»¹Ã»ÓÃµ½
+/*--------é–»ãˆ çšé”å‘¯ç²»å¦¤ä½ºã€Š--------*/
+extern float L_raw,R_raw;//é–¸æ°¬é…£å¨¼ä¼´å´¶å¨‘æ¥…åš‹é‰â•‚É‘é¥å‘´æ‚½éŠŠãƒ¥ç…‚
+extern float LM_raw,RM_raw;//é–¸æ°¬é…£å¨¼ä¼´å´¶å¨‘æ¥…åš‹é‰â•‚É‘é¥å‘´æ‚½éŠŠãƒ¥ç…‚
+
+extern float L,R,LM,RM,MID ;//é–¸æ°¬é…£å¨¼ä¼´å´¶å¨‘æ¥…åš‹é‰â•‚É‘é¥å‘´æ‚½éŠŠãƒ¥ç…‚
 extern uint16  max_AD ,min_AD ;
 
 extern uint16  i ,j ,k1 ,temp ;
 
-/*--------²âÊÔËã·¨--------*/
+/*--------æ¿æ‘îƒˆé¦îˆœç²»å¦¤ä½ºã€Š--------*/
 void motor_rotate_and_reverse(int pwm_channel_forward, int pwm_channel_reverse, int rotate_time, int reverse_time, int pwm_duty_max);
 
 
@@ -79,45 +88,42 @@ void motor_rotate_and_reverse(int pwm_channel_forward, int pwm_channel_reverse, 
 
 
 float filter(float value);
-void key_scan_cycle_pwm_state(void); // ·µ»ØÀàĞÍ¸ÄÎª void
+void key_scan_cycle_pwm_state(void); // é‰â•‚æŸ¨å¨²æ «çŒ¾ç’‡èŒ¬â‚¬çƒ½å¼¨é–«æ¶œç¤‹ void
 float limit_range(float input, float limit);
 
 
 /**************************************************************************
-º¯Êı¹¦ÄÜ£ºÍâÉè¼°pid³õÊ¼»¯
-Èë¿Ú²ÎÊı£ºÎŞ
-·µ»Ø  Öµ£ºwu
+é–¸æˆ£å§¤é†ç†¼å´é”è¯²å´é–¿æ¶™è‰¾é¡¦è¤æ‹‹é¯ÑƒæŒ¤pidé–¸æ“ç¹‚é¡«æ„°å´ ?é–¸å¿‹å„±è¤°æ¶¢å´£éŒæ¶™æ®¶é–¿æ¶™ç¢å¦«?
+é‰â•‚æŸ¨å¨²? é–¸å©„ã€‹ç»±çšu
 **************************************************************************/
 void init(void);
 /**************************************************************************
-º¯Êı¹¦ÄÜ£º--- ¸¨Öúº¯Êı£ºÉèÖÃ×óÓÒÂÖÄ¿±êËÙ¶È ---
-Èë¿Ú²ÎÊı£ºÎŞ
-·µ»Ø  Öµ£ºwu
+é–¸æˆ£å§¤é†ç†¼å´é”è¯²å´é–¿?-- é‰å æ‡æ¿®îˆå´™é‘ºãƒ¦æ®¶é–¿æ¶™ä¿ºé¡”æ› ç´”é¡”é—´ç®¯é–¸æ¬ç–‡é¤å—›æƒ„é¡”ç•Œå¼é—î‚¤å–ç€¹?---
+é–¸å¿‹å„±è¤°æ¶¢å´£éŒæ¶™æ®¶é–¿æ¶™ç¢å¦«?
+é‰â•‚æŸ¨å¨²? é–¸å©„ã€‹ç»±çšu
 **************************************************************************/
 void set_target_speeds(float left_target, float right_target);
 
-//È¨ÖØ
+//é–ºå¤Šå•´é£?
 float Calculate_Weight_Mid(uint16 M);
-//·äÃùÆ÷
 void buzzer_control_with_enable(float check_value, float abs_threshold, int enable_state);
-//¶ÁÈ¡
+//é å›ªî‡§è¤°?
 uint16 read_adc_average(ADCN_enum channel, unsigned short avg_times, ADCRES_enum resolution);
-//ÏŞ·ù
+//é—‚å‹¬åŠ•ç» ?
 float limit_float(float value, float min_limit, float max_limit);
-//¹éÒ»»¯
 float normalize_float(float value, float min, float max);
-//ËÙ¶È
+//é—î‚¤å–ç€¹?
 float calculate_dynamic_target_speed_quadratic(float current_mid_value);
 
 //typedef enum {
-//	RGB_COLOR_OFF = 0,        // ÎŞ: P26=0, P74=0, P07=0
-//	RGB_COLOR_WHITE = 1,      // °×: P26=0, P74=0, P07=1
-//	RGB_COLOR_CYAN = 2,       // Çà: P26=0, P74=1, P07=0
-//	RGB_COLOR_YELLOW_GREEN = 3, // »ÆÂÌ: P26=1, P74=0, P07=0
-//	RGB_COLOR_MAGENTA = 4,    // ×Ï: P26=0, P74=1, P07=1
-//	RGB_COLOR_GREEN = 5,      // ÂÌ: P26=1, P74=1, P07=0
-//	RGB_COLOR_RED = 6,        // ºì: P26=1, P74=0, P07=1
-//	RGB_COLOR_BLUE = 7        // À¶: P26=1, P74=1, P07=1
+//	RGB_COLOR_OFF = 0,        // é–º? P26=0, P74=0, P07=0
+//	RGB_COLOR_WHITE = 1,      // é–»? P26=0, P74=0, P07=1
+//	RGB_COLOR_CYAN = 2,       // é—‚? P26=0, P74=1, P07=0
+//	RGB_COLOR_YELLOW_GREEN = 3, // å§’æ¶˜å«®ç’? P26=1, P74=0, P07=0
+//	RGB_COLOR_MAGENTA = 4,    // ç¼? P26=0, P74=1, P07=1
+//	RGB_COLOR_GREEN = 5,      // ç¼‚? P26=1, P74=1, P07=0
+//	RGB_COLOR_RED = 6,        // ç¼? P26=1, P74=0, P07=1
+//	RGB_COLOR_BLUE = 7        // é–½? P26=1, P74=1, P07=1
 //} RgbColorCode_t;
 
 //void set_rgb_pins(int p26_val, int p74_val, int p07_val);
@@ -134,8 +140,7 @@ void update_gyro_angle_accumulator(float* p_angle_accumulator,
 
 void change_speed_Target(int speed);
 void change_speed_Target_base(int speed);
-////¿¨¶ûÂü
-//void kalanma_data();
+////é–¸æ¤»â‚¬å´‡æ¯œé–º?//void kalanma_data();
 //void init_kalman();
 //extern float k_roll;
 //extern float k_pitch;
@@ -144,7 +149,6 @@ void change_speed_Target_base(int speed);
 
 
 #endif 
-
 
 
 

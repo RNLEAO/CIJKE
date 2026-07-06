@@ -30,7 +30,7 @@
 
 //------逐飞科技产品驱动头文件
 #include "SEEKFREE_FONT.h"
-#include "SEEKFREE_18TFT.h"
+#include "SEEKFREE_IPS114_SPI.h"
 
 #include "SEEKFREE_TSL1401.h"
 #include "SEEKFREE_ABSOLUTE_ENCODER.h"

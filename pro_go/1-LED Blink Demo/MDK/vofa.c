@@ -1,6 +1,6 @@
 #include "headfile.h"
 
-float vofa_send_data[VOFA_MAX] = {0};
+float xdata vofa_send_data[VOFA_MAX] = {0};
 
 // 把浮点数据转为4个八位数据，存到数组中
 static void Float_to_Byte(float f, uint8 byte[]) 
@@ -48,9 +48,9 @@ void vodka_JustFloat_send(float *data_str,uint16 num)
 //  @brief      vofa调参 vofa调参 vofa调参 vofa调参 vofa调参
 //-------------------------------------------------------------------------------------------------------------------
 
-uint8 RxBuffer[1];//串口接收缓冲
+uint8 xdata RxBuffer[1];//串口接收缓冲
 uint16 RxLine = 0;//指令长度
-uint8 DataBuff[200];//指令内容
+uint8 xdata DataBuff[200];//指令内容
 float data_Get=0;//接收缓冲区
 
 

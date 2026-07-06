@@ -1080,3 +1080,37 @@ void ips114_showfloat(uint16 x,uint16 y,double dat,uint8 num,uint8 pointnum)
 
     ips114_showstr(x, y, buff);	//ÏÔÊ¾Êý×Ö
 }
+
+void ips114_show_font(unsigned short x, unsigned short y,
+                      unsigned char width, unsigned char height,
+                      const unsigned char *font_data,
+                      unsigned short font_color, unsigned short bg_color)
+{
+    unsigned char i, j, k;
+    unsigned char byte_data;
+    unsigned short bytes_per_row;
+
+    bytes_per_row = (width + 7) / 8;
+
+    for (i = 0; i < height; i++)
+    {
+        ips114_set_region(x, y + i, x + width - 1, y + i);
+
+        for (j = 0; j < bytes_per_row; j++)
+        {
+            byte_data = font_data[i * bytes_per_row + j];
+
+            for (k = 0; k < 8; k++)
+            {
+                if ((j * 8 + k) < width)
+                {
+                    if (byte_data & 0x80)
+                        ips114_writedata_16bit(font_color);
+                    else
+                        ips114_writedata_16bit(bg_color);
+                }
+                byte_data <<= 1;
+            }
+        }
+    }
+}

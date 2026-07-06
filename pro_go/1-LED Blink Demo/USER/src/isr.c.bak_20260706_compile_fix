@@ -1,0 +1,466 @@
+
+#include "headfile.h"
+
+
+
+void UART1_Isr() interrupt 4
+{
+    uint8 res;
+	static uint8 dwon_count;
+    if(UART1_GET_TX_FLAG)
+    {
+        UART1_CLEAR_TX_FLAG;
+        busy[1] = 0;
+    }
+    if(UART1_GET_RX_FLAG)
+    {
+        UART1_CLEAR_RX_FLAG;
+        res = SBUF;
+        //闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔烘畷鐠佽瀚归柨鐔告灮閹风兘鏁撻弬銈嗗
+        if(res == 0x7F)
+        {
+            if(dwon_count++ > 20)
+                IAP_CONTR = 0x60;
+        }
+        else
+        {
+            dwon_count = 0;
+        }
+    }
+}
+
+//UART2闁跨喎褰ㄧ拋瑙勫
+void UART2_Isr() interrupt 8
+{
+    if(UART2_GET_TX_FLAG)
+	{
+        UART2_CLEAR_TX_FLAG;
+		busy[2] = 0;
+	}
+    if(UART2_GET_RX_FLAG)
+	{
+        UART2_CLEAR_RX_FLAG;
+		//闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻幑宄扮槑鏉堢偓瀚归柨鐔告灮閹疯渹璐熼柨鐔告灮閹风ù2BUF
+
+	}
+}
+
+
+//UART3闁跨喎褰ㄧ拋瑙勫
+void UART3_Isr() interrupt 17
+{
+    if(UART3_GET_TX_FLAG)
+	{
+        UART3_CLEAR_TX_FLAG;
+		busy[3] = 0;
+	}
+    if(UART3_GET_RX_FLAG)
+	{
+        UART3_CLEAR_RX_FLAG;
+		//闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻幑宄扮槑鏉堢偓瀚归柨鐔告灮閹疯渹璐熼柨鐔告灮閹风ù3BUF
+
+	}
+}
+
+
+//UART4闁跨喎褰ㄧ拋瑙勫
+void UART4_Isr() interrupt 18
+{
+    if(UART4_GET_TX_FLAG){
+			
+        UART4_CLEAR_TX_FLAG;
+				busy[4] = 0;
+	  }
+	
+    if(UART4_GET_RX_FLAG){
+			
+        UART4_CLEAR_RX_FLAG;
+				 
+			//濮ｅ繘鏁撻弬銈嗗闁跨喓笑绾板瀚规稉鈧柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐宓庨敐蹇斿闁跨喐鏋婚幏鐑芥晸閹归顒查幏鐑芥晸妤楄櫣銆嬮幏?闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗
+			RxLine++;                            
+			//闁跨喐鏋婚幏閿嬬槨闁跨喕濞囬弬銈嗗闁跨喓笑绾板瀚归柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐宓庨幉瀣闁跨喕濮ら崚浼存晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏?			DataBuff[RxLine-1]=S4BUF;                 
+			
+			if(S4BUF==0x21) // //闁跨喐鏋婚幏鐑芥晸缁夊憡鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹峰嘲绻旀担?			{
+			USART_PID_Adjust();//闁跨喐鏋婚幏鐑芥晸閹归攱鏋婚幏鐑芥晸閺傘倖瀚归柨鐔煎徍鐠囇勫闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归崐濂告晸閺傘倖瀚归柨鐔告灮閹?			memset(DataBuff,0,sizeof(DataBuff));  //闁跨喐鏋婚幏閿嬬垽闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁??
+			RxLine=0;  //闁跨喐鏋婚幏閿嬪灛闁跨喐鏋婚幏椋庣煒闁跨喐鏋婚幏鐑芥晸??
+			}
+			
+		
+		//闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻幑宄扮槑鏉堢偓瀚归柨鐔告灮閹疯渹璐熼柨鐔告灮閹风ù4BUF;
+		if(wireless_module_uart_handler != NULL){
+			// 闁跨喓鐓悮瀛樺闁跨喐鏋婚幏铚傝礋闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归幐鍥晸閺傘倖瀚?
+			// 闁跨喎濮粵瑙勫婵鏁撻弬銈嗗闁跨喐鏋婚幏鐑芥晸閺傘倖瀚瑰Ο锟犳晸閺傘倖瀚归柨鐔虹哺閹插瀚归柨鐔告灮閹风兘鏁撻弬銈嗗闁板墎鍙呴柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏?
+			wireless_module_uart_handler(S4BUF);
+			
+			
+		}
+	}
+}
+
+#define LED P52
+void INT0_Isr() interrupt 0
+{
+	LED = 0;	//闁跨喐鏋婚幏鐑芥晸閺傘倖瀚筁ED
+}
+void INT1_Isr() interrupt 2
+{
+
+}
+void INT2_Isr() interrupt 10
+{
+	INT2_CLEAR_FLAG;  //闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归崡绋款€掗柨鐔告灮閹?
+}
+void INT3_Isr() interrupt 11
+{
+	INT3_CLEAR_FLAG;  //闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归崡绋款€掗柨鐔告灮閹?
+}
+
+void INT4_Isr() interrupt 16
+{
+	INT4_CLEAR_FLAG;  //闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归崡绋款€掗柨鐔告灮閹?
+}
+
+void TM0_Isr() interrupt 1
+{
+
+}
+
+
+
+float error=0;
+
+
+
+
+float Roll_x=0;
+//濞戞挸鐡ㄥ鍌炲矗濮椻偓閸?float err_t=0.000036035;
+#define PWM_DUTY_MIN -8000 
+//闂侇偆鍠庣€规娊鎮?float current_l_pwm_inc = 0;
+float current_r_pwm_inc = 0;
+
+float current_l_pwm_inc_last = 0;
+float current_r_pwm_inc_last = 0;
+
+
+//闁哄倻鎳撻幃婊堟偝?float current_l_pwm_duty_turn = 0;
+float current_r_pwm_duty_turn = 0;
+//闁哄牃鍋撶紓浣哥墣缁额參宕欑花鍞歮
+float current_l_pwm_duty = 0;
+float current_r_pwm_duty = 0;
+
+uint16 a,b;
+float mot_inc=0;
+float mot_inc_element=0;
+float gyro_roll_cross=0;
+float gyro_right_angle=0;
+
+
+//闁革箑妫涢獮鍡欐喆閹烘垵顔婄紒澶樺灠閸?float gyro_roll_sign_rign=0;
+float gyro_roll_sign_cross=0;
+
+//闁烩晜鎸虫禍鍓ф喆閹烘垵顔婄紒澶樺灠閸ㄥ骸顕ｉ埀顒勫礂?char gyro_roll_sign_angle=0;
+
+//闁稿繐鎳愰弫鍝ョ磽閺嶎偆鍨抽柛锝冨妿琚ч柛鎺戞缁辨垿宕?char encoder_charge_sign=0;
+float encoder_charge_element=0;
+//闁告ぞ绀侀悺褏绱撻弽顐ゅ灣闁革絻鍔庤ⅶ闁告帒妫楃槐鎴﹀礂?char encoder_cross_sign=0;
+float encoder_cross_element=0;
+
+
+
+//闁烩晜鎸虫禍?缂佸鍨伴崹搴☆嚕閳ь剟宕?//闁烩晜鎸虫禍?缂佸鍨伴崹搴ㄥ矗濮椻偓閸?char encoder_straight_sign = 0;             
+float encoder_straight_element = 0;         
+
+
+//闁革箑妫涢獮鍡涙焻閳ь剟宕?float ring_out_element=0;
+char ring_out_sign=0;
+
+
+
+/*****************闁告碍鍨块崳娲椽鐏炶棄褰嗙€殿喖绻愭稊蹇涘矗閸愬弶鈻曠€殿喖鍊借棢闁?****************//*****************闁告碍鍨块崳娲椽鐏炶棄褰嗙€殿喖绻愭稊蹇涘矗閸愬弶鈻曠€殿喖鍊借棢闁?****************//*****************闁告碍鍨块崳娲椽鐏炶棄褰嗙€殿喖绻愭稊蹇涘矗閸愬弶鈻曠€殿喖鍊借棢闁?****************/
+
+float dir_loop_limit=450; 
+float dir_enlarge=1;  
+float speed_damping=0; // 闂侇偆鍠庣€规娊骞庨幋婵嗙厬缂侇垳绮弳?float speed_damping_enlarge=0.38; // 闂侇偆鍠庣€规娊骞庨幋婵嗙厬缂侇垳绮弳?
+
+
+float err_H=1.5;
+float err_X=1;
+float err_HM=1;
+float err_D=1;
+float err_M=1;
+
+//闁汇垹鐏氶惈娓乨c闂佹彃娲▔?float vbat_in=0;
+float adc_vbat=0;
+float adc_vbat_tar=12.8;
+float encoder_charge_element_vbat_tar=0.25;
+float charge_pwm_open_val=300;
+
+
+int zhijiao_flag;
+
+float speed[5]={258,258,258,0,0};//0闁烩晜鎸虫禍楣冩晬?闁烩晝顥愰～?
+
+
+
+void TM1_Isr() interrupt 3
+{
+	
+			static int timer_call_count = 0; 
+
+//			angle_project(100);
+		
+		/*********************闁轰胶澧楀畵渚€鏌岄崶顒佽偁*********************/
+			
+			acquire_sensor_data();
+
+		/*********************闂傚嫧鍋撻柧鏄忔〃閸楀海绮旈姘€?********************/
+
+			update_gyro_angle_accumulator(&gyro_roll,gyro_roll_sign_rign);//闁哄拋鍣ｉ埀顒佸哺濡狙囨懚鏉炴澘宕曠紒澶樺灠閸?			update_gyro_angle_accumulator(&gyro_roll_cross,gyro_roll_sign_cross);//闁告ぞ绀侀悺褔姊介埀顒勬懚鏉炴澘宕曠紒澶樺灠閸?			update_gyro_angle_accumulator(&gyro_right_angle,gyro_roll_sign_angle);//闁烩晜鎸虫禍楣冩⒔閳ь剟鎽舵潪鏉垮磿缂佸鍨伴崹?	
+		/*********************閻犱警鍨抽埢鑲╃矓椤栨艾鐎?********************/
+
+			//Encoder integration
+			if (timer_call_count < 30) {
+			timer_call_count++;
+				l_speed_now=0;
+				r_speed_now=0;
+				mot_inc = 0.0f;
+			} 
+			update_encoder_speedup_value(&mot_inc_element,encoder_sign);
+			
+		
+	  /*********************pid閻犱緤绱曢悾?********************/
+
+		if(MID <= 45) dir_enlarge = 1.0011;  // 閻忓繐绻楅銈咁啅椤曞棛绀夐柛鈺勬椤㈠懏鏅堕悙鍨妱
+		else dir_enlarge = 0.99; // 閻犲浂鍨板Ο濠冨緞瑜濈槐婵嬪嫉閳ь剚寰勮椤ゅ啴鎯?
+		// 闁?闁告瑯浜滃﹢顏堝嫉椤忓洨绠婚柛锕€妫涢獮鍡涙晬閸у潟r_flag == 0闁挎稑顦板鍌炴晬鐏炲墽澹岄柟?MID 闁衡偓閻熸澘缍侀柛鈺勬椤㈠懘鏌呴悢宄邦唺
+//		if (cir_flag == 0) {
+//				if (MID <= 45)
+//						change_speed_Target_base(speed[1]);
+//				else
+//						change_speed_Target_base(speed[0]);
+//		}
+
+			
+		if(MID <= 40) speed_damping_enlarge=0.3;
+		else speed_damping_enlarge=0.1;
+		
+		
+		speed_damping = fabs(gyro_data[0]) * speed_damping_enlarge;
+		speed_damping = limit_function(speed_damping, 0, 150);
+
+		
+
+		if(Turn_PID.err > 0) {
+				L_pid.Target = L_pid.Target_base - dir_enlarge * Turn_PID.out;
+				R_pid.Target = R_pid.Target_base + dir_enlarge * Turn_PID.out - speed_damping;
+		} else {
+				L_pid.Target = L_pid.Target_base - dir_enlarge * Turn_PID.out - speed_damping;
+				R_pid.Target = R_pid.Target_base + dir_enlarge * Turn_PID.out;
+		}
+		
+		
+		// 濞ｅ洦绻冪€垫棃宕㈤悢鍛婄畳濠⒀呭仱閸ｆ椽宕ｉ悩鎻掝潱缂備焦鎸婚悗?		current_l_pwm_inc = current_l_pwm_inc + IncPID(l_speed_now, L_pid.Target, &L_pid);
+		current_r_pwm_inc = current_r_pwm_inc + IncPID(r_speed_now, R_pid.Target, &R_pid);
+
+		// 閻?PWM 濠⒀呭仱閸ｆ椽宕愰懝鎵閻炴稑濂旂粩鎾⒓閼稿灚濮㈡繛澶樻緛缁辨瑩宕ユ惔鈽嗘П闁荤偛妫寸槐?		current_l_pwm_inc = current_l_pwm_inc_last * 0.2f + current_l_pwm_inc * 0.8f;
+		current_r_pwm_inc = current_r_pwm_inc_last * 0.2f + current_r_pwm_inc * 0.8f;
+
+		// 閻庢稒锚閸嬪秹寮甸渚囧仹婵犲鍊栫亸婵嬪触鎼达絾鐣遍柛濠呭亹閺併倖绂嶆惔婵堢憮濞戞挴鍋撴繛鍡忓墲閹躲倕鈻?		current_l_pwm_inc_last = current_l_pwm_inc;
+		current_r_pwm_inc_last = current_r_pwm_inc;
+
+		// 闂傚嫭鍔曠粻?		current_l_pwm_inc = limit_function(current_l_pwm_inc, -2000, 2000);
+		current_r_pwm_inc = limit_function(current_r_pwm_inc, -2000, 2000);
+
+
+	 
+	  /*********************闁哄牃鍋撶紓浣哥墣缁额參宕欑花鍞歮閻犱緤绱曢悾?********************/
+
+
+
+			
+			
+		//濞戞捁灏欐鍥焻閻斿嘲顔婇柣婊庡灥缁额參宕?
+		#if 1
+			
+		current_l_pwm_duty=current_l_pwm_inc;  //current_l_pwm_inc
+		current_r_pwm_duty=current_r_pwm_inc;  //current_r_pwm_inc
+		
+		#endif
+			
+		
+
+				//闁稿繐鎳愰弫?		#if 0
+			if (pwm_state_charge == 1) {
+				
+					current_l_pwm_duty=charge_pwm_open_val;
+					current_r_pwm_duty=charge_pwm_open_val;
+					
+					encoder_charge_sign = 1;
+					update_encoder_speedup_value(&encoder_charge_element,encoder_charge_sign);
+					if(encoder_charge_element >= encoder_charge_element_vbat_tar){
+					pwm_state_charge = 0;     // 闁告帒娲﹀畷鏌ユ偐閼哥鍋撴担鐤閺夌儐鍓欓幃婊勭▔?          encoder_charge_sign = 0;       // 闁稿绮嶉娑氱矓椤栨艾鐎?
+					encoder_charge_element = 0.0f; // 婵炴挸鎳樺▍搴ｇ矓椤栨艾鐎婚柛娆愶耿閸?					}
+			}
+			else if(pwm_state_charge==0){
+
+				current_l_pwm_duty=current_l_pwm_inc;
+				current_r_pwm_duty=current_r_pwm_inc;
+					
+				current_l_pwm_inc=limit_function(current_l_pwm_inc,-2000,2000);
+				current_r_pwm_inc=limit_function(current_r_pwm_inc,-2000,2000);
+							
+			
+			}
+
+
+		#endif
+		
+		
+		//闁哄牃鍋撶紓浣哥墣缁额參宕欏ú顏咁€欐?		current_l_pwm_duty=limit_function(current_l_pwm_duty,-5000,5000);
+		current_r_pwm_duty=limit_function(current_r_pwm_duty,-5000,5000);
+
+
+		
+	  /*********************濞ｅ洦绻冩慨銏＄┍濠靛洤袘*********************/
+
+				//protect
+		key_scan_cycle_pwm_state();
+
+		if(pwm_state==2){
+		mot_inc=0;
+		current_l_pwm_inc=0;
+		current_r_pwm_inc=0;
+		}	
+		
+	 /*********************閺夊牊鎸搁崵?********************/
+		out_pwm();
+	
+}
+
+
+
+
+ 
+
+
+
+
+
+// ======================== 闁告ぞ绀侀悺?========================
+
+float left_value, right_value;   /* 闁告碍鍨块崳鍝勎熼敓鐘虫瘣 */
+int16 ad_diff;                 /* 婵☆垽绻濋弳鍗烆啅椤斿皷鍋?*/
+float ad_sum;                    /* 婵☆垽绻濋弳閬嶅椽?*/
+float deviation;                 /* 闁哄牃鍋撶紓浣哥墕缂嶅﹥绋夐埀顒勫磻韫囨挻鈻曢柨娑樼墢濞呫劑宕氶崱妯兼Х闁?*/
+float A_CBH=1;
+float B_CBH=1;
+float C_CBH=1;
+
+
+void TM4_Isr() interrupt 20
+{
+	
+	
+			
+			//闁汇垹鐏氶崝?			L  	=	read_adc_average(ADC_P06,5,ADC_12BIT);//1000
+			LM	=	read_adc_average(ADC_P00,5,ADC_12BIT);
+			RM	=	read_adc_average(ADC_P01,5,ADC_12BIT);//900
+			R		=	read_adc_average(ADC_P05,5,ADC_12BIT);
+			MID	=	read_adc_average(ADC_P10,5,ADC_12BIT);//1200
+
+			//闂傚嫭鍔曠粻?			L  	=	limit_float(L,0,4000);
+			LM 	=	limit_float(LM,0,4000);
+			RM 	=	limit_float(RM,0,4000);
+			R  	=	limit_float(R,0,4000);
+			MID	=	limit_float(MID,0,4000);
+	
+			//闁告鍠庨～鎰板极閻楀牆绁?
+			R_raw=R;
+			L_raw=L;
+			RM_raw=RM;
+			LM_raw=LM;
+			//鐟滅増甯婄粩鎾礌?			L 	= normalize_float(L,0,4000);
+			LM	= normalize_float(LM,0,4000);
+			RM	= normalize_float(RM,0,4000);
+			R 	= normalize_float(R,0,4000);
+			MID =	normalize_float(MID,0,4000);
+
+			
+		/****************error***************/
+	
+
+			//婵?
+			#if 1
+			
+			error = (
+									err_H  * (L - R) + 
+									err_X  * (2*LM - 2*RM)
+							 ) / (
+									err_HM * (L + R) + 
+									err_D  * fabs(LM - RM)
+								
+							 );
+			
+			#endif 
+			
+			
+			//鐎瑰壊鍠楅惁顕€宕仦鑺モ枙2
+			#if 0
+				A_CBH=Calculate_Weight_Mid(MID);
+				B_CBH=1-A_CBH;
+				error = (
+            A_CBH * (1.5 * (L - R)) +
+            B_CBH * (2.0 * (LM - RM))
+         ) /
+         (
+            A_CBH * (L + R) +
+            B_CBH * fabs(LM - RM)
+         );
+			#endif 
+			
+			
+		/****************闁革箑妫涢獮?**************/
+			if(cir_flag==2){
+				ring_out_element++;
+				if(ring_out_element >300){
+					if(fabs(gyro_roll) < 240.0f)
+					{
+						cir_flag=0;
+
+						gyro_roll_sign_rign=0;
+						encoder_sign=0;
+						mot_inc_element=0;
+						gyro_roll=0;
+						circle_enter_case = 0;
+						change_speed_Target_base(speed[0]);
+					}
+				}
+			}
+			else{
+			ring_out_element=0;
+			}
+			
+			Circle_detect();
+			Circle_cl();
+			
+		/*********************闁哄倻鎳撻幃婊堟偝?********************/
+		Turn_PID.err=error;
+		Turn_PID.out=Turn_PID.kp*Turn_PID.err+
+								 Turn_PID.ki*Turn_PID.err*fabs(Turn_PID.err)*2+
+								 Turn_PID.kd*(Turn_PID.err-Turn_PID.err_last)+
+								 Turn_PID.kp1*gyro_data[0];
+		Turn_PID.last=Turn_PID.out;
+		Turn_PID.out=limit_function(Turn_PID.out,-dir_loop_limit,dir_loop_limit);
+
+		Turn_PID.err_last=Turn_PID.err;
+
+
+		TIM4_CLEAR_FLAG; //婵炴挸鎳樺▍搴㈢▔椤撶喐鐒介柡宥呮搐缁?
+}
+
+
+
+
+
+
+

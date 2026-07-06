@@ -154,6 +154,29 @@ void ips114_showuint16(uint16 x,uint16 y,uint16 dat);
 void ips114_showint32(uint16 x,uint16 y,int32 dat,uint8 num);
 void ips114_showfloat(uint16 x,uint16 y,double dat,uint8 num,uint8 pointnum);
 
+#define TFT_DISPLAY_DIR  IPS114_DISPLAY_DIR
+#define TFT_X_MAX        IPS114_X_MAX
+#define TFT_Y_MAX        IPS114_Y_MAX
+#define TFT_PENCOLOR     IPS114_PENCOLOR
+#define TFT_BGCOLOR      IPS114_BGCOLOR
+
+#define lcd_init         ips114_init
+#define lcd_clear        ips114_clear
+#define lcd_drawpoint    ips114_drawpoint
+#define lcd_showchar     ips114_showchar
+#define lcd_showstr      ips114_showstr
+#define lcd_showint8     ips114_showint8
+#define lcd_showuint8    ips114_showuint8
+#define lcd_showint16    ips114_showint16
+#define lcd_showuint16   ips114_showuint16
+#define lcd_showint32    ips114_showint32
+#define lcd_showfloat    ips114_showfloat
+#define lcd_show_font    ips114_show_font
+
+void ips114_show_font(unsigned short x, unsigned short y,
+                      unsigned char width, unsigned char height,
+                      const unsigned char *font_data,
+                      unsigned short font_color, unsigned short bg_color);
 
 //-----------------------------------------------    
 

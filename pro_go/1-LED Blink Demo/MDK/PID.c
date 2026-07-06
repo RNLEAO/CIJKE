@@ -4,7 +4,6 @@
 // 定义PID控制器结构体变量
 _PID R_pid;  // 右电机PID控制器
 _PID L_pid;  // 左电机PID控制器
-_PID ang_pid;  // 左电机PID控制器
 
 _PID Turn_PID; // 转向PID控制器
 _PID Gyro_PID;
@@ -100,82 +99,6 @@ float gyro_lowpass_filter(float new_value, float old_value, float alpha)
     return alpha * new_value + (1.0f - alpha) * old_value;
 }
 
-float GyroPositionPID(float gyro_now_raw, float Target, _PID* sptr)
-{
-    static float gyro_filtered = 0.0f;  // 滤波后的陀螺仪值，保持状态
-		float deadzone= 0.0f;  
-	
-	
-    // 1️⃣ 滤波陀螺仪数据
-    gyro_filtered = gyro_lowpass_filter(gyro_now_raw, gyro_filtered, 0.2f);  // alpha = 0.2，可调
-
-    // 2️⃣ 更新当前值和目标值
-    sptr->now = gyro_filtered;
-    sptr->Target = Target;
-
-    // 3️⃣ 计算当前误差
-    sptr->err = sptr->Target - sptr->now;
-
-    // 4️⃣ 死区处理（防止噪声误触发）
-    deadzone = 1.0f;  // 1 deg/s 死区
-    if (fabs(sptr->err) < deadzone)
-    {
-        sptr->err = 0.0f;
-    }
-
-    // 5️⃣ 更新积分项
-    sptr->err_sum += sptr->err;
-    // 积分限幅
-    if (sptr->err_sum > 50.0f) 
-        sptr->err_sum = 50.0f;
-    else if (sptr->err_sum < -50.0f) 
-        sptr->err_sum = -50.0f;
-
-    // 6️⃣ 计算PID各项输出
-    sptr->kp_out = sptr->kp * sptr->err;
-    sptr->ki_out = sptr->ki * sptr->err_sum;
-    sptr->kd_out = sptr->kd * (sptr->err - sptr->err_last);
-
-    // 7️⃣ 最终输出，加上角速度抑制项 kp1 * gyro_filtered
-    sptr->out = sptr->kp_out + sptr->ki_out + sptr->kd_out - sptr->kp1 * sptr->now;
-
-    // 8️⃣ 保存历史误差
-    sptr->err_last = sptr->err;
-
-    // 9️⃣ 返回控制输出值
-    return sptr->out;
-}
-
-
-#include <math.h>  /* for fabs() */
-
-float turn_PstPID(float turn_error,_PID* sptr)
-{
-    float delta_output;
-
-    /* 更新当前误差 */
-    sptr->err = turn_error;
-
-    /* 非线性增强型增量 PID 计算 */
-    delta_output = sptr->kp * (sptr->err - sptr->err_last)
-                 + sptr->ki * sptr->err
-                 + sptr->kd * sptr->err * fabs(sptr->err)
-                 + sptr->kd2 * sptr->err * sptr->err * sptr->err;
-
-    /* 叠加输出 */
-    sptr->out += delta_output;
-
-    /* 输出限幅 */
-    if (sptr->out > sptr->limit_max)
-        sptr->out = sptr->limit_max;
-    else if (sptr->out < sptr->limit_min)
-        sptr->out = sptr->limit_min;
-
-    /* 误差历史更新 */
-    sptr->err_last = sptr->err;
-
-    return sptr->out;
-}
 
 /**
  * @brief  设置PID控制器的参数

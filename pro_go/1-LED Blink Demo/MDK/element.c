@@ -1,164 +1,295 @@
 #include "headfile.h"
 uint16 cir_angle_flag = 0;    // 标志位，用于判断和记录入环时的左右打角方向 (0: 初始, 1: 右侧入环, 2: 左侧入环, 3: 右侧出环, 4: 左侧出环)
-uint16 flag_incir = 0;        // 标志位，表示小车是否已经进入圆环内 (0: 否, 1: 是)
 uint8 cir_flag = 0;          // 状态标志位，用于控制圆环检测和循迹的不同阶段 (0: 初始, 1: 准备入环, 2: 准备打角, 3: 打角结束, 4: 准备出环, 5: 准备离开圆环)
 
 uint8 encoder_sign=0;//编码器积分开关
 uint8 yuansu_flag=1;     //各元素标志位,1为直道
-uint16 temp_flag=0;
+
 uint16 temp_flag_speed=0;
-uint8 speed_strategy_active =0;
-uint8 speed_ctrl_flag = 0;     // 控速状态设置为“直道加速”
+
+float in_circle_LR =60;
+float in_circle_MID=70;
+float in_circle_LRMID=70;
+float ring_error=1.11;
+uint8 circle_enter_case = 0; // 0: 未进环, 1: LR+LRMID, 2: MID单独满足
+float temp_flag=0;
 
 
-int temp_t;
+
+float ring_inc_element12=0.21;
+float ring_inc_element56=0.3;
+float ring_inc_element67=0.35;
+
+
+
+float ring_angle_23=15;
+float ring_angle_34=120;
+float ring_angle_45=280;
+
+float temp_flag_tar=30;
+
+
+//void Circle_detect(void)
+//{
+
+//			//float in_circle_LR =60;
+//			//float in_circle_MID=70;
+//			if ((L + R > in_circle_LR && MID > in_circle_LRMID) && cir_flag == 0)
+//			{
+
+//					cir_flag=1;
+//					gyro_roll_sign_rign = 0; // 积分开关
+//					encoder_sign = 1;        // 编码器
+//					P52=1;
+//							
+//					if (LM_raw > RM_raw && cir_angle_flag != 2)
+//					{
+//							cir_angle_flag = 1;//左入环					
+//					}
+//					else if (LM_raw < RM_raw && cir_angle_flag != 1)
+//					{
+//							cir_angle_flag = 2;//右入环
+//					}
+//				
+//					
+//			}
+
+//			//入环
+//			//前瞻的投影打到切点上
+//			//ring_inc_element12
+//			else if (  (cir_flag == 1) && ( mot_inc_element>=ring_inc_element12 ) ) 
+//			{
+//					P52=0;
+//					cir_flag=2;
+//					gyro_roll_sign_rign=1;//陀螺仪开始积分
+//					change_speed_Target_base(speed[2]);	
+//					
+//			}
+//			//圆环内
+//			//float ring_angle_23=15;
+//			else if( (cir_flag==2) && cir_angle_flag &&( fabs(gyro_roll) > ring_angle_23))
+//			{
+//            cir_flag=3;
+//            encoder_sign = 0;   
+//						
+//			}
+//		
+//			//准备出环
+//			//float ring_angle_34=120;
+//			else if((cir_flag==3)&& fabs(gyro_roll) > ring_angle_34)
+//			{
+//				cir_flag=4;
+//			}
+//			
+//			//出环
+//			//float ring_angle_45=270;
+//			else if(cir_flag==4&&( fabs(gyro_roll) > ring_angle_45))
+//			{
+//			  cir_flag=5;
+//				encoder_sign=1;
+
+//			}
+//			
+//						
+//			//出环成功
+//			//float ring_inc_element56=0.3;
+//			//float temp_flag_tar=40;
+//			else if((cir_flag==5)&&(mot_inc_element>ring_inc_element56))
+//			{
+//				cir_flag=6;
+//				P52=1;
+//			}
+//			
+//			 else if((cir_flag==6)&&(mot_inc_element>ring_inc_element56+0.1))
+//				{
+//						temp_flag++;
+//						
+//						if (temp_flag > temp_flag_tar) // 计数足够，彻底归零退出
+//						{
+//								cir_flag = 0;
+
+//								gyro_roll_sign_rign = 0;
+//								encoder_sign = 0;
+//								mot_inc_element = 0;
+//								gyro_roll = 0;
+//								circle_enter_case = 0;
+//								temp_flag = 0;
+//								P52=0;
+//								change_speed_Target_base(speed[0]);
+//						}
+//				}
+//			
+//}
+
+
+
+
+////........圆环处理...........//
+//void Circle_cl(void)
+//{
+
+//		//环内转圈，写死
+//	if(  (cir_flag==2)||(cir_flag==3) )
+//	{
+//		
+//			if (cir_angle_flag == 1) {
+//					error=ring_error;
+//					
+//			} else if(cir_angle_flag == 2) {
+//					error=-ring_error;
+//			}
+//		
+//	}
+
+//	//出环
+//	else if(  (cir_flag==4)||  (cir_flag==5)  ||  (cir_flag==6)  )
+//	{
+//		
+//		  Turn_PID.err=error;
+//	
+//	}
+//	
+//}
+
+
 
 
 void Circle_detect(void)
 {
-    static float mot_inc_last_at_entry = 0.0f;
-    static uint8 in_circle_integration = 0;
 
-		//检测到圆环
-		//入环条件
-    if ((yuansu_flag==1)&&(MID >= 95)||(((L+R)>150)&&MID>80) && cir_flag == 0 )
-    {	
-				//清除
-		
+			//float in_circle_LR =60;
+			//float in_circle_MID=70;
+			if ((L + R > in_circle_LR && MID > in_circle_LRMID) && cir_flag == 0)
+			{
 
-				gyro_roll_sign_rign=0;//积分开关
-				gyro_roll=0;
-				mot_inc_element=0;
-			
-			
-				cir_flag = 1;//全局标记圆环	
-				encoder_sign=1;//编码器
-			
-				yuansu_flag=2;
-			
-
-
-    }
-		//入环
-    else if ((cir_flag == 1)) 
-    {
-				cir_flag=2;
-				gyro_roll_sign_rign=1;//陀螺仪开始积分
-			
-				if (R_raw > L_raw && cir_angle_flag != 2)
-        {
-            cir_angle_flag = 1;//左入环					
+					cir_flag=1;
+					gyro_roll_sign_rign = 0; // 积分开关
+					encoder_sign = 1;        // 编码器
+					P52=1;
+							
+					if (LM_raw > RM_raw && cir_angle_flag != 2)
+					{
+							cir_angle_flag = 1;//左入环					
+					}
+					else if (LM_raw < RM_raw && cir_angle_flag != 1)
+					{
+							cir_angle_flag = 2;//右入环
+					}
 				
-        }
-        else if (L_raw >R_raw && cir_angle_flag != 1)
-        {
-            cir_angle_flag = 2;//右入环
+					
+			}
 
-        }
-
-
-		}
+			//入环
+			//前瞻的投影打到切点上
+			//ring_inc_element12
+			else if (  (cir_flag == 1) && ( mot_inc_element>=ring_inc_element12 ) ) 
+			{
+					P52=0;
+					cir_flag=2;
+					gyro_roll_sign_rign=1;//陀螺仪开始积分
+					change_speed_Target_base(speed[2]);	
+					
+			}
 			//圆环内
-			else if( (cir_flag==2) && (L>80&&R>80&&LM>80&&RM>80&&MID>80) && cir_angle_flag && (mot_inc_element>=0.4) )
+			//float ring_angle_23=15;
+			else if( (cir_flag==2) && cir_angle_flag &&( fabs(gyro_roll) > ring_angle_23))
 			{
             cir_flag=3;
-            encoder_sign = 0;                        // 编码器可能用于不同目的或关闭
-						change_speed_Target_base(280);
-						//！！！！！
-			
-
+            encoder_sign = 0;   
+						
 			}
 		
 			//准备出环
-			else if((cir_flag==3)&& fabs(gyro_roll) > 240.0f)
+			//float ring_angle_34=120;
+			else if((cir_flag==3)&& fabs(gyro_roll) > ring_angle_34)
 			{
 				cir_flag=4;
-
-								
 			}
-				
+			
 			//出环
-			else if(cir_flag==4&&( fabs(gyro_roll) > 280.0f))
+			//float ring_angle_45=280;
+			else if(cir_flag==4&&( fabs(gyro_roll) > ring_angle_45))
 			{
-				cir_flag=5;
+			  cir_flag=5;
 				encoder_sign=1;
+
 			}
+			
+						
 			//出环成功
-			else if((cir_flag==5)&&( fabs(gyro_roll) > 250.0f)&&(mot_inc_element>0.3))
+			//float ring_inc_element56=0.3;
+			//float temp_flag_tar=40;
+			else if((cir_flag==5)&&(mot_inc_element>ring_inc_element56))
 			{
 				cir_flag=6;
+				P52=1;
 			}
 			
-			else if((cir_flag==6)&&(mot_inc_element>1.2))
-			{
-				
-				if(temp_flag<100)
+			 else if((cir_flag==6)&&(mot_inc_element>ring_inc_element56))
 				{
-						change_speed_Target_base(240);
-					//！！！！！
-					
-				}
-				else if (temp_flag>= 100 && temp_flag<415){
-//						change_speed_Target_base(220);  // 切换状态时设置目标速度
-//！！！！！
+						temp_flag++;
 
-						L_pid.Target_base=calculate_dynamic_target_speed_quadratic(MID);
-						R_pid.Target_base=calculate_dynamic_target_speed_quadratic(MID);
-					
+						if (temp_flag > temp_flag_tar) // 计数足够，彻底归零退出
+						{
+								cir_flag = 0;
+
+								gyro_roll_sign_rign = 0;
+								encoder_sign = 0;
+								mot_inc_element = 0;
+								gyro_roll = 0;
+								circle_enter_case = 0;
+								temp_flag = 0;
+								P52=0;
+								change_speed_Target_base(speed[0]);
+						}
 				}
-				else if(temp_flag>=415)
-				{
-					
-					temp_flag=0;
-					cir_flag=0;
-				
-					yuansu_flag=1; 
-					
-					gyro_roll_sign_rign=0;
-					encoder_sign=0;
-					mot_inc_element=0;
-					gyro_roll=0;
-					time_speedup_sign=1;
-				}
-				
-			}
 			
-
-
 }
-
-
-
-
-
 
 
 
 
 //........圆环处理...........//
-void cricle_cl(void)
+void Circle_cl(void)
 {
 
-		//环内转圈，非写死
-	if(cir_flag==3)
+		//环内转圈，写死
+	if(  (cir_flag==2)||(cir_flag==3) )
 	{
 		
 			if (cir_angle_flag == 1) {
-					Turn_PID.err=-0.98;
+					error=ring_error;
+					
 			} else if(cir_angle_flag == 2) {
-					Turn_PID.err=0.98;
+					error=-ring_error;
 			}
 		
 	}
+	else if(cir_flag==5){
+	
+			if (cir_angle_flag == 1) {
+					error=0.55;
+					
+			} else if(cir_angle_flag == 2) {
+					error=-0.55;
+			}
+	
+	}
+	
+	
 	//出环
-	if((cir_flag==6)||(cir_flag==5))
+	else if(  (cir_flag==4)  ||  (cir_flag==6)  )
 	{
 		
-		Turn_PID.err=error;
+		  Turn_PID.err=error;
 	
 	}
 	
 }
+
+
+
+
 
 
 
@@ -202,43 +333,60 @@ void check_hall_sensor(void)
 
 
 
+// ======================== 直角判断 ========================
+
+char right_angle_flag=0;
+int right_angle_count=0;
+
+void right_angle_judge()
+{
+	if( MID<45 && (L<=12&&R<=12) && (((LM-RM)>20&&RM<7)||((RM-LM)>20&&LM<7)) && right_angle_flag==0 )
+	{
+		right_angle_flag=1;
+	}
+	
+	if( right_angle_flag==1 && (fabs(gyro_right_angle)>75) )
+	{
+		right_angle_flag=2;
+	}
+
+}
+
+
+
+
+void right_angle_cl()
+{
+	if(right_angle_flag==1)
+	{
+		gyro_roll_sign_angle=1;//开启积分开关
+		change_speed_Target_base(speed[1]);
+		
+	}
+	
+	else if(right_angle_flag==2)
+	{
+		right_angle_count++;
+		if(right_angle_count>40)
+		{
+			right_angle_count=0;
+			gyro_roll_sign_angle=0;
+			right_angle_flag=0;
+			change_speed_Target_base(speed[0]);
+		}
+		
+
+	}
+}
 // ======================== 直道判断 ========================
+
+
 float straight_err_threshold = 0.28f;       // 误差判断阈值（越小越严格）
 float straight_integral_threshold = 0.15f;  // 积分量判断阈值（越大越稳妥）
-char straight_flag=0;
-void straight_judge(float straight_err_threshold, float straight_integral_threshold)
-{
-    // 未进入直道，且处于元素状态，才允许判断是否进入直道
-    if (straight_flag == 0 && yuansu_flag == 1)
-    {
-        if (fabs(Turn_PID.err) < straight_err_threshold)
-        {
-            encoder_straight_sign = 1;
-        }
-        else
-        {
-            encoder_straight_sign = 0;
-            encoder_straight_element = 0; // 偏离清零
-        }
 
-        if (encoder_straight_element > straight_integral_threshold)
-        {
-            straight_flag = 1;
-            speed_ctrl_flag = 8;
-        }
-    }
 
-    // ? 不再满足误差条件 或 元素状态退出 —— 则退出直道状态
-    if (straight_flag == 1)
-    {
-        if (fabs(Turn_PID.err) > straight_err_threshold || yuansu_flag != 1)
-        {
-            straight_flag = 0;
-            speed_ctrl_flag = 1;
-            encoder_straight_element = 0;
-            encoder_straight_sign = 0;
-        }
-    }
-}
+
+
+
 
 

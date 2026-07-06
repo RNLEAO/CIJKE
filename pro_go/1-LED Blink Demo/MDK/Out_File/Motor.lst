@@ -1,12 +1,12 @@
-C251 COMPILER V5.60.0,  Motor                                                              24/06/25  15:45:11  PAGE 1   
+C251 COMPILER V5.60.0,  Motor                                                              06/07/26  15:12:38  PAGE 1   
 
 
 C251 COMPILER V5.60.0, COMPILATION OF MODULE Motor
 OBJECT MODULE PLACED IN .\Out_File\Motor.obj
-COMPILER INVOKED BY: C:\Keil_v5\C251\BIN\C251.EXE Motor.c XSMALL WARNINGLEVEL(3) OPTIMIZE(0,SPEED) BROWSE INCDIR(..\..\L
-                    -ibraries\libraries;..\..\Libraries\seekfree_libraries;..\..\Libraries\seekfree_peripheral;..\CODE;..\USER\inc;..\USER\sr
-                    -c;..\..\Libraries\seekfree_components;..\USER\inc;..\USER\src;..\MDK) DEBUG PRINT(.\Out_File\Motor.lst) TABS(2) OBJECT(.
-                    -\Out_File\Motor.obj) 
+COMPILER INVOKED BY: D:\C251\C251\BIN\C251.EXE Motor.c XSMALL WARNINGLEVEL(3) OPTIMIZE(0,SPEED) BROWSE INCDIR(..\..\Libr
+                    -aries\libraries;..\..\Libraries\seekfree_libraries;..\..\Libraries\seekfree_peripheral;..\CODE;..\USER\inc;..\USER\src;.
+                    -.\..\Libraries\seekfree_components;..\USER\inc;..\USER\src;..\MDK) DEBUG PRINT(.\Out_File\Motor.lst) TABS(2) OBJECT(.\Ou
+                    -t_File\Motor.obj) 
 
 stmt  level    source
 
@@ -30,52 +30,46 @@ stmt  level    source
    18          float motor_inc = 0;
    19          
    20          
-   21          // PWM 值
-   22          float r_pwm = 0.0;
-   23          float l_pwm = 0.0;
-   24          
-   25          
-   26          
-   27          //<-------------------|-------------------|-------------------|-------------------|-------------------|--
+   21          //<-------------------|-------------------|-------------------|-------------------|-------------------|--
              ------------------|-------------------|-------------------|-------------------|-------------------|------------------->
-   28          //                  -50                 -35                 -25                 -15                 -5   
+   22          //                  -50                 -35                 -25                 -15                 -5   
              -               0                  5                  15                 25                 35                 50
-   29          //<-------(-∞,-50)----|----(-50,-35)------|----(-35,-25)------|----(-25,-15)------|----(-15,-5)-------|
+   23          //<-------(-∞,-50)----|----(-50,-35)------|----(-35,-25)------|----(-25,-15)------|----(-15,-5)-------|
              ------(-5,1)-------|-----(1,5)--------|-----(5,15)-------|-----(15,25)------|-----(25,35)------|-----(35,50)------|-----(
              -50,+∞)----->
-   30          //       Kp=340,Ki=40,Kd=18   Kp=270,Ki=34,Kd=18   Kp=215,Ki=28.5,Kd=18   Kp=140,Ki=21.5,Kd=15   Kp=42,Ki
+   24          //       Kp=340,Ki=40,Kd=18   Kp=270,Ki=34,Kd=18   Kp=215,Ki=28.5,Kd=18   Kp=140,Ki=21.5,Kd=15   Kp=42,Ki
              -=6.6,Kd=4   Kp=10,Ki=1.3,Kd=1   Kp=42,Ki=6.6,Kd=4   Kp=140,Ki=21.5,Kd=15   Kp=215,Ki=28.5,Kd=18   Kp=270,Ki=34,Kd=18   K
              -p=300,Ki=37,Kd=18   Kp=340,Ki=40,Kd=18
-   31          
-   32          
-   33          /**
-   34           * @brief  限幅函数 (Clamp Function)
-   35           *         将输入值限制在 [min_val, max_val] 范围内。
-   36           * @param  value    要进行限幅的数值.
-   37           * @param  min_val  允许的最小值.
-   38           * @param  max_val  允许的最大值.
-   39           * @retval float    限幅后的数值.
-   40           */
-   41          float limit_function(float value, float min_val, float max_val) {
-   42   1        if (value < min_val) {
-   43   2          return min_val; // 如果 value 小于最小值，返回最小值
-   44   2        } else if (value > max_val) {
-   45   2          return max_val; // 如果 value 大于最大值，返回最大值
-   46   2        } else {
-   47   2          return value;    // 如果 value 在范围内，返回原始值
-   48   2        }
-   49   1      }
+   25          
+   26          
+   27          /**
+   28           * @brief  限幅函数 (Clamp Function)
+   29           *         将输入值限制在 [min_val, max_val] 范围内。
+   30           * @param  value    要进行限幅的数值.
+   31           * @param  min_val  允许的最小值.
+   32           * @param  max_val  允许的最大值.
+   33           * @retval float    限幅后的数值.
+   34           */
+   35          float limit_function(float value, float min_val, float max_val) {
+   36   1        if (value < min_val) {
+   37   2          return min_val; // 如果 value 小于最小值，返回最小值
+   38   2        } else if (value > max_val) {
+   39   2          return max_val; // 如果 value 大于最大值，返回最大值
+   40   2        } else {
+   41   2          return value;    // 如果 value 在范围内，返回原始值
+   42   2        }
+   43   1      }
+   44          
+   45          
+   46          
+   47          
+   48          
+   49          
    50          
-C251 COMPILER V5.60.0,  Motor                                                              24/06/25  15:45:11  PAGE 2   
+C251 COMPILER V5.60.0,  Motor                                                              06/07/26  15:12:38  PAGE 2   
 
    51          
    52          
-   53          
-   54          
-   55          
-   56          
-   57          
-   58          
 
 
 Module Information          Static   Overlayable
@@ -87,7 +81,7 @@ Module Information          Static   Overlayable
   pdata size           =    ------     ------
   xdata size           =    ------     ------
   xdata-const size     =    ------     ------
-  edata size           =        52     ------
+  edata size           =        44     ------
   bit size             =    ------     ------
   ebit size            =    ------     ------
   bitaddressable size  =    ------     ------
@@ -95,7 +89,7 @@ Module Information          Static   Overlayable
   far data size        =    ------     ------
   huge data size       =    ------     ------
   const size           =    ------     ------
-  hconst size          =        80     ------
+  hconst size          =        64     ------
 End of Module Information.
 
 

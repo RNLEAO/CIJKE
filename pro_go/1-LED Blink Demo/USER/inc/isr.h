@@ -29,7 +29,6 @@ extern float mot_inc;
 
 extern float Roll_x;
 extern float err_t;
-extern float adcdata_aver[5];
 
 	// 定义变量存储当前的PWM占空比
 extern float current_l_pwm_duty ;
@@ -42,16 +41,17 @@ extern float current_r_pwm_inc;
 extern float current_l_pwm_inc_last;
 extern float current_r_pwm_inc_last;
 
-extern float l_pwm_inc_raw;
-extern float r_pwm_inc_raw;
-
-
 
 extern float mid_dynamic_weight;
 
 //积分开关
 extern float mot_inc_element;
 extern float gyro_roll_sign_rign;
+
+//直道角度积分开关
+extern char gyro_roll_sign_angle;
+//直道角度积分数值
+extern float gyro_right_angle;
 
 //圆环退出
 extern float ring_out_element;
@@ -83,8 +83,14 @@ extern float err_HM;
 extern float err_D;
 extern float err_M;
 
+extern float A_CBH;
+extern float B_CBH;
+extern float C_CBH;
 
 
+extern float encoder_charge_element_vbat_tar;
+extern float adc_vbat_tar;
+extern float charge_pwm_open_val;
 
 
 extern float error; 
@@ -102,6 +108,11 @@ extern float adc_vbat;
 
 extern float gyro_roll_sign_cross;
 extern float gyro_roll_cross;
+
+//速度
+extern float speed[5];
+
+
 #endif
 
 

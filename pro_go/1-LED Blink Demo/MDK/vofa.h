@@ -12,7 +12,7 @@ typedef union
 }FloatLongType1;
 
 
-extern float vofa_send_data[VOFA_MAX];
+extern float xdata vofa_send_data[VOFA_MAX];
 void vodka_JustFloat_send(float *data_str,uint16 num);
 
 
@@ -20,9 +20,9 @@ void vodka_JustFloat_send(float *data_str,uint16 num);
 
 
 //  @brief      vofa调参 vofa调参 vofa调参 vofa调参 vofa调参
-extern uint8 RxBuffer[1];//串口接收缓冲
+extern uint8 xdata RxBuffer[1];//串口接收缓冲
 extern uint16 RxLine;//指令长度
-extern uint8 DataBuff[200];//指令内容
+extern uint8 xdata DataBuff[200];//指令内容
 // * 解析出DataBuff中的数据
 float Get_Data(void);
 

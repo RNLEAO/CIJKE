@@ -28,6 +28,9 @@ extern const unsigned char Hua_32x32[];
 extern const unsigned char Tang_32x32[];
 extern const unsigned char Wei_32x32[];
 extern const unsigned char Mian_32x32[];
+extern const unsigned char Ci_32x32[];
+extern const unsigned char Jian_32x32[];
+extern const unsigned char Ke_32x32[];
 
 extern const uint8 code tft_ascii[95][16];
 extern const uint8 code oled_8x16[];

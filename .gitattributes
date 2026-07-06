@@ -1,0 +1,12 @@
+# Normalize text files so history stays readable across Windows/IDE edits.
+* text=auto
+
+# Common build artifacts are binary and should not be diffed as text.
+*.obj binary
+*.crf binary
+*.lst binary
+*.map binary
+*.hex binary
+*.htm binary
+*.html binary
+

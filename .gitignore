@@ -1,0 +1,6 @@
+# Build outputs and IDE-generated files
+**/Out_File/
+**/*.uvgui.*
+**/*.uvopt.bak
+**/*.bak
+
