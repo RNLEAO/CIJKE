@@ -845,9 +845,16 @@ void display_straight_param(uint8 key_press)
     lcd_showfloat(50, 7, right_angle_flag, 1, 0);
 }
 
+// Explicit monitor thresholds for the right-angle debug page.
+#define RIGHT_ANGLE_TARGET_ANGLE 76.0f
+#define RIGHT_ANGLE_EXIT_COUNT   40.0f
+
 void display_right_angle_param(uint8 key_press)
 {
-    (void)key_press;
+    if (key_press == KEY_EVENT_ITEM_NEXT)
+    {
+        lcd_clear(WHITE);
+    }
 
     lcd_showstr(0, 0, "RA Monitor");
 
