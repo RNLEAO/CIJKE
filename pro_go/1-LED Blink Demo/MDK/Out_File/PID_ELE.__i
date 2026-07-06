@@ -1,1 +1,0 @@
-"PID_ELE.c" LARGE WARNINGLEVEL (3) OPTIMIZE (0,SPEED) BROWSE INCDIR(..\..\Libraries\libraries;..\..\Libraries\seekfree_libraries;..\..\Libraries\seekfree_peripheral;..\CODE;..\USER\inc;..\USER\src;..\..\Libraries\seekfree_components;..\USER\inc;..\USER\src;..\MDK) DEBUG PRINT(.\Out_File\PID_ELE.lst) TABS (2) OBJECT(.\Out_File\PID_ELE.obj)

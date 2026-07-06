@@ -1,6 +1,17 @@
-# Build outputs and IDE-generated files
+# Keil build outputs and IDE-generated files
 **/Out_File/
+**/*.build_log.htm
+**/*.crf
+**/*.dep
+**/*.hex
+**/*.lnp
+**/*.lst
+**/*.map
+**/*.obj
 **/*.uvgui.*
+**/*.uvopt
 **/*.uvopt.bak
-**/*.bak
 
+# Local backup snapshots
+**/*.bak
+**/*.bak_*
