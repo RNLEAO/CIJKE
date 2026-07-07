@@ -6,8 +6,8 @@
 		////////////////////////////////////////***************闂佽法鍠愰弸濠氬箯闁垮顦ч梺璺ㄥ枑閺嬪骞忛悜鑺ユ櫢闁哄倶鍊栫€?**************////////////////////////////////////////
 
 uint8 key_value;
-int8 key_mode=-1;                 
-uint8 menu_sign=13;
+int8 key_mode=0;                 
+uint8 menu_sign=14;
 uint8 display_mode=0;
 
 
@@ -89,14 +89,14 @@ void main()
 				if (key_value == KEY_EVENT_PAGE_NEXT) {
 						lcd_clear(WHITE); // 濠电偞鎸搁幊搴ㄦ儓閸℃稑绠肩€广儱瀚粙濠囨煥濞戞瀚扮憸鏉垮级缁傛帡濡烽敂鎯ь棏闂佺顕栭崳锝呫€掔捄鐩捬囧磼濞戞瑦婢掔紓?						// 婵犵鈧啿鈧綊鎮樻径搴涗汗闁规儳鍟块·鍛存煛閸曢潧鐏℃繛鎾崇埣瀹曘儲鎯斿┑鍫紘婵＄偑鍊楀▍銏㈡濠靛绀嗘繛鍡楃箲缁€鈧梺鍛婂笚婢瑰棝顢栭崶銊р枖闁逞屽墯閵?(0)
 						if (key_mode >= (menu_sign - 1)) { 
-								key_mode = -1;
+								key_mode = 0;
 						} else { // 闂佸憡鐔粻鎴﹀垂椤栫偞鏅悘鐐舵閻庡ジ鏌熼獮鍨仼闁糕晛鏈粙澶屸偓锝傛櫇椤忓崬顪?								key_mode++;
 						}
 				}
 				// 闂佸憡纰嶉崹宕囩箔閸屾粎绀勫┑鐘冲搸閳?(key_value == 1)
 				else if (key_value == KEY_EVENT_PAGE_PREV) { // 濠电偛顦崝宥夊礈閻楀牊浜ゆ繛鍡樻尭濞咃繝鏌?else if闂佹寧绋戦惉濂稿灳濡崵鈹嶆繝闈涙噽閸?key_value 婵炴垶鎸哥粔宕囨娴兼潙瑙﹂悘鐐靛亾椤ρ勭節婵炴劑鍊曢崰?4 闂?1
 						lcd_clear(WHITE); // 濠电偞鎸搁幊搴ㄦ儓閸℃稑绠肩€广儱瀚粙濠囨煥濞戞瀚扮憸鏉垮级缁傛帡濡烽敂鎯ь棏闂佺顕栭崳锝呫€掔捄鐩捬囧磼濞戞瑦婢掔紓?						// 婵犵鈧啿鈧綊鎮樻径搴涗汗闁规儳鍟块·鍛存煛閸曢潧鐏ｆい鎴濇处缁嬪鍩€椤掍降浜?(0)闂佹寧绋戦懟顖炲垂椤栫偛鐐婇柣鎰絻閻撳倿鏌￠崼姘壕闂佸憡鑹剧花鑲╃博鐎涙ǜ浜?(menu_sign - 1)
-						if (key_mode <= -1) {
+						if (key_mode <= 0) {
 								key_mode = (menu_sign - 1);
 						} else { // 闂佸憡鐔粻鎴﹀垂椤栫偞鏅悘鐐舵閻庡ジ鏌熼獮鍨仼闁糕晛鐭傚畷婊冾吋閸曨収浼囨俊?								key_mode--;
 						}
@@ -123,23 +123,26 @@ void main()
 
 
 				switch (key_mode) {
-        case 0:  display_submenu_check(key_value); break;
-        case 1:  display_motor(&L_pid, l_speed_now, current_l_pwm_duty, key_value, 0); break;
-        case 2:  display_motor(&R_pid, r_speed_now, current_r_pwm_duty, key_value, 1); break;
-        case 3:  display_t(key_value); break;
-        case 4:  display_submenu_ee(key_value); break;
-        case 5:  display_gyro(key_value); break;
-        case 6:  display_g(key_value); break;
-        case 7:  display_straight_param(key_value); break;
-        case 8:  display_right_angle_param(key_value); break;
-        case 9:  display_circle_debug_menu(key_value); break;
-        case 10: display_circle_advanced_menu(key_value); break;
-        case 11: display_speed_menu(key_value); break;
-        case 12: display_submenu_charge_debug(key_value); break;
-        default:
+        case 0:
             lcd_show_font(16, 56, 32, 32, Ci_32x32, BLACK, WHITE);
             lcd_show_font(48, 56, 32, 32, Jian_32x32, BLACK, WHITE);
             lcd_show_font(80, 56, 32, 32, Ke_32x32, BLACK, WHITE);
+            break;
+        case 1:  display_submenu_check(key_value); break;
+        case 2:  display_motor(&L_pid, l_speed_now, current_l_pwm_duty, key_value, 0); break;
+        case 3:  display_motor(&R_pid, r_speed_now, current_r_pwm_duty, key_value, 1); break;
+        case 4:  display_t(key_value); break;
+        case 5:  display_submenu_ee(key_value); break;
+        case 6:  display_gyro(key_value); break;
+        case 7:  display_g(key_value); break;
+        case 8:  display_straight_param(key_value); break;
+        case 9:  display_right_angle_param(key_value); break;
+        case 10: display_circle_debug_menu(key_value); break;
+        case 11: display_circle_advanced_menu(key_value); break;
+        case 12: display_speed_menu(key_value); break;
+        case 13: display_submenu_charge_debug(key_value); break;
+        default:
+            key_mode = 0;
             break;
     }
 
