@@ -153,10 +153,10 @@ char pwm_state_charge = 255;
 uint8 Pwmout =0;
 void key_scan_cycle_pwm_state(void)
 {
-    static uint8 raw70 = 1, stable70 = 1, cnt70 = 0;
-    static uint8 raw71 = 1, stable71 = 1, cnt71 = 0;
-    static uint8 raw72 = 1, stable72 = 1, cnt72 = 0;
-    static uint8 raw73 = 1, stable73 = 1, cnt73 = 0;
+    static uint8 raw70 = 0, stable70 = 0, cnt70 = 0;
+    static uint8 raw71 = 0, stable71 = 0, cnt71 = 0;
+    static uint8 raw72 = 0, stable72 = 0, cnt72 = 0;
+    static uint8 raw73 = 0, stable73 = 0, cnt73 = 0;
 
     static uint8 prev70_down = 0;
     static uint8 prev71_down = 0;
