@@ -50,6 +50,7 @@
 
 //------组件层文件
 #include "control.h"
+#include "negative_pressure.h"
 #include "Motor.h"
 #include "PID.h"
 #include "MENU_DATA.h"
