@@ -16,6 +16,7 @@ void display_circle_debug_menu(uint8 key_press);
 void display_circle_advanced_menu(uint8 key_press);
 void display_speed_menu(uint8 key_press);
 void display_submenu_charge_debug(uint8 key_press);
+void display_negative_pressure_output_debug(uint8 key_press);
 extern float x_t_int;
 extern float x_t_float;
 

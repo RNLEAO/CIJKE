@@ -28,6 +28,7 @@
 
 uint8 key_scan(int mode);//閹稿鏁幍顐ｅ伎
 uint8 fetch_ui_key_event(void);
+extern int8 key_mode;
 float low_pass_filter(float current_value, float last_value, float alpha);//娴ｅ酣鈧碍鎶ゅ▔?
 void adjust_parameter_by_key_float(uint8 key_value, float *parameter, float step);
 float Get_roll(void);

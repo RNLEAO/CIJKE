@@ -312,6 +312,14 @@ void TM1_Isr() interrupt 3
 				//protect
 		key_scan_cycle_pwm_state();
 
+		negative_pressure_auto_update_request(
+			(cir_flag >= 2 && cir_flag <= 5) ? 1 : 0,
+			NEG_PRESS_TRIGGER_CIRCLE);
+
+		// Fourth-stage layer 1: run the auto-state machine globally,
+		// but keep the real negative-pressure output locked off.
+		negative_pressure_auto_tick();
+
 		if(pwm_state==2){
 		mot_inc=0;
 		current_l_pwm_inc=0;
