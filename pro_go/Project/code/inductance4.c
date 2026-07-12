@@ -7,7 +7,7 @@
 #define INDUCTANCE4_MAX_MARGIN_DEN       100UL
 #define INDUCTANCE4_CONFIG_ADDR          0x0400UL
 #define INDUCTANCE4_CONFIG_MAGIC         0x34494E44UL
-#define INDUCTANCE4_CONFIG_VERSION       3U
+#define INDUCTANCE4_CONFIG_VERSION       4U
 
 static const uint16 code inductance4_default_min[INDUCTANCE4_CHANNEL_COUNT] =
 {
@@ -16,7 +16,7 @@ static const uint16 code inductance4_default_min[INDUCTANCE4_CHANNEL_COUNT] =
 
 static const uint16 code inductance4_default_max[INDUCTANCE4_CHANNEL_COUNT] =
 {
-    4007U, 3988U, 3973U, 4011U
+    3999U, 3995U, 3969U, 4007U
 };
 
 typedef struct

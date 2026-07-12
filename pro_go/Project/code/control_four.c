@@ -60,10 +60,10 @@ void init(void)
 		ctimer_count_init(MOTOR2_ENCODER);
 		delay_ms(10);
 
-		pwm_init(PWMA_CH2P_P62, 17000, 0);
-		pwm_init(PWMA_CH1P_P60, 17000, 0);
-		pwm_init(PWMA_CH4P_P66, 17000, 0);
-		pwm_init(PWMA_CH3P_P64, 17000, 0);
+		gpio_init(IO_P64, GPO, GPIO_LOW, GPO_PUSH_PULL);
+		gpio_init(IO_P60, GPO, GPIO_LOW, GPO_PUSH_PULL);
+		pwm_init(LEFT_MOTOR_PWM, 17000, 0);
+		pwm_init(RIGHT_MOTOR_PWM, 17000, 0);
 		delay_ms(10);
 		
 		wireless_uart_init();

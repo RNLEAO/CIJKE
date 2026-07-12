@@ -8,12 +8,11 @@
 #define MOTOR2_DIR P53
 
 
-// Dual-PWM H-bridge outputs.
-#define MOTOR1 PWMA_CH2P_P62
-#define MOTOR1_d P64
-
-#define MOTOR2 PWMA_CH1P_P60
-#define MOTOR2_d P66
+// Motor outputs follow the verified stage1 test project.
+#define LEFT_MOTOR_PWM      PWMA_CH4P_P66
+#define LEFT_MOTOR_DIR      P64
+#define RIGHT_MOTOR_PWM     PWMA_CH2P_P62
+#define RIGHT_MOTOR_DIR     P60
 
 
 

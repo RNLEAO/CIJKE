@@ -39,10 +39,10 @@ void out_pwm(){
 	
 		if(pwm_state==0||pwm_state==2)
 		{
-			pwm_duty(PWMA_CH3P_P64, 0);
-			pwm_duty(PWMA_CH2P_P62, 0);
-			pwm_duty(PWMA_CH4P_P66, 0);
-			pwm_duty(PWMA_CH1P_P60, 0);
+			LEFT_MOTOR_DIR = 0;
+			RIGHT_MOTOR_DIR = 0;
+			pwm_duty(LEFT_MOTOR_PWM, 0);
+			pwm_duty(RIGHT_MOTOR_PWM, 0);
 			current_l_pwm_duty = 0;
 			current_r_pwm_duty = 0;
 			current_l_pwm_inc=0;
@@ -55,20 +55,18 @@ void out_pwm(){
 			/* --- 左电机控制 --- */
 			if(current_l_pwm_duty > 0) // 正占空比，期望电机正转
 			{
-				/* --- 这是原来反转的代码，现在用于正转 --- */
-				pwm_duty(PWMA_CH4P_P66, 0);
-				pwm_duty(PWMA_CH1P_P60, (uint32)current_l_pwm_duty);
+				LEFT_MOTOR_DIR = 1;
+				pwm_duty(LEFT_MOTOR_PWM, (uint32)current_l_pwm_duty);
 			}
 			else if(current_l_pwm_duty < 0) // 负占空比，期望电机反转
 			{
-				/* --- 这是原来正转的代码，现在用于反转 --- */
-				pwm_duty(PWMA_CH4P_P66, (uint32)(-current_l_pwm_duty));
-				pwm_duty(PWMA_CH1P_P60, 0);
+				LEFT_MOTOR_DIR = 0;
+				pwm_duty(LEFT_MOTOR_PWM, (uint32)(-current_l_pwm_duty));
 			}
 			else // 占空比为0，电机停止
 			{
-				pwm_duty(PWMA_CH4P_P66, 0);
-				pwm_duty(PWMA_CH1P_P60, 0);
+				LEFT_MOTOR_DIR = 0;
+				pwm_duty(LEFT_MOTOR_PWM, 0);
 			}
 
 			/******************************************************
@@ -76,20 +74,18 @@ void out_pwm(){
 			 ******************************************************/
 			if(current_r_pwm_duty > 0) // 正占空比 -> 右轮正转
 			{
-				// 正转逻辑: CH3P(P64)输出PWM, CH2P(P62)设为0
-				pwm_duty(PWMA_CH3P_P64, 0);
-				pwm_duty(PWMA_CH2P_P62, (uint32)current_r_pwm_duty);
+				RIGHT_MOTOR_DIR = 1;
+				pwm_duty(RIGHT_MOTOR_PWM, (uint32)current_r_pwm_duty);
 			}
 			else if(current_r_pwm_duty < 0) // 负占空比 -> 右轮反转
 			{
-				// 反转逻辑: CH3P(P64)设为0, CH2P(P62)输出PWM
-				pwm_duty(PWMA_CH3P_P64, (uint32)(-current_r_pwm_duty));
-				pwm_duty(PWMA_CH2P_P62, 0);
+				RIGHT_MOTOR_DIR = 0;
+				pwm_duty(RIGHT_MOTOR_PWM, (uint32)(-current_r_pwm_duty));
 			}
 			else // 占空比为0 -> 右轮停止
 			{
-				pwm_duty(PWMA_CH3P_P64, 0);
-				pwm_duty(PWMA_CH2P_P62, 0);
+				RIGHT_MOTOR_DIR = 0;
+				pwm_duty(RIGHT_MOTOR_PWM, 0);
 			}
 		}
 
@@ -115,8 +111,9 @@ void acquire_sensor_data(void)
     r_speed_now = r_speed_now * 0.2f + r_encoder * 0.8f;
 
     // Motor direction adjustment
-    if (MOTOR1_DIR != 0) l_speed_now = -l_speed_now;
-    if (MOTOR2_DIR != 1) r_speed_now = -r_speed_now;
+    if (MOTOR1_DIR == 0) l_speed_now = -l_speed_now;
+    if (MOTOR2_DIR == 1) r_speed_now = -r_speed_now;
+
 }
 
 //旋转保护
