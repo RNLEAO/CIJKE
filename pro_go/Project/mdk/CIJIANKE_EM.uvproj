@@ -628,6 +628,16 @@
               <FilePath>..\code\menu_four.c</FilePath>
             </File>
             <File>
+              <FileName>negative_pressure.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\code\negative_pressure.c</FilePath>
+            </File>
+            <File>
+              <FileName>negative_pressure_menu.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\code\negative_pressure_menu.c</FilePath>
+            </File>
+            <File>
               <FileName>Motor.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\code\Motor.c</FilePath>
@@ -691,6 +701,16 @@
               <FileName>menu.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\code\menu.h</FilePath>
+            </File>
+            <File>
+              <FileName>negative_pressure.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\code\negative_pressure.h</FilePath>
+            </File>
+            <File>
+              <FileName>negative_pressure_menu.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\code\negative_pressure_menu.h</FilePath>
             </File>
             <File>
               <FileName>Motor.h</FileName>

@@ -8,8 +8,7 @@
 		// ASCII-cleaned legacy comment.
 
 uint8 key_value;
-int8 key_mode=0;                 
-uint8 menu_sign=16;
+int8 key_mode=MENU_PAGE_HOME;
 uint8 display_mode=0;
 
 
@@ -601,6 +600,7 @@ void main()
             {
                 pwm_state = 0U;
                 Pwmout = 0U;
+                negative_pressure_set_enabled(0);
             }
 	
 			lcd_show_status(pwm_state);
@@ -611,8 +611,8 @@ void main()
 				// ASCII-cleaned legacy comment.
 				if (key_value == KEY_EVENT_PAGE_NEXT) {
 						lcd_clear(WHITE); // ASCII-cleaned legacy comment.
-						if (key_mode >= (menu_sign - 1)) { 
-								key_mode = 0;
+						if (key_mode >= (MENU_PAGE_COUNT - 1)) {
+								key_mode = MENU_PAGE_HOME;
 						} else { // ASCII-cleaned legacy comment.
 								key_mode++;
 						}
@@ -620,8 +620,8 @@ void main()
 				// ASCII-cleaned legacy comment.
 				else if (key_value == KEY_EVENT_PAGE_PREV) { // ASCII-cleaned legacy comment.
 						lcd_clear(WHITE); // ASCII-cleaned legacy comment.
-						if (key_mode <= 0) {
-								key_mode = (menu_sign - 1);
+						if (key_mode <= MENU_PAGE_HOME) {
+								key_mode = (MENU_PAGE_COUNT - 1);
 						} else { // ASCII-cleaned legacy comment.
 								key_mode--;
 						}
@@ -649,30 +649,37 @@ void main()
 
 
 				switch (key_mode) {
-        case 0:
+        case MENU_PAGE_HOME:
             lcd_show_font(72, 48, 32, 32, Ci_32x32, BLACK, WHITE);
             lcd_show_font(104, 48, 32, 32, Jian_32x32, BLACK, WHITE);
             lcd_show_font(136, 48, 32, 32, Ke_32x32, BLACK, WHITE);
             break;
-        case 1:  display_submenu_check(key_value); break;
-        case 2:  display_motor(&L_pid, l_speed_now, current_l_pwm_duty, key_value, 0); break;
-        case 3:  display_motor(&R_pid, r_speed_now, current_r_pwm_duty, key_value, 1); break;
-        case 4:  display_t(key_value); break;
-        case 5:  display_submenu_ee(key_value); break;
-        case 6:  display_gyro(key_value); break;
-        case 7:  display_g(key_value); break;
-        case 8:  display_straight_param(key_value); break;
-        case 9:  display_right_angle_param(key_value); break;
-        case 10: display_circle_debug_menu(key_value); break;
-        case 11: display_circle_advanced_menu(key_value); break;
-        case 12: display_speed_menu(key_value); break;
-        case 13: display_submenu_charge_debug(key_value); break;
-        case 14: display_inductance4_calibration(key_value); break;
-        case 15: display_inductance4_data(); break;
+        case MENU_PAGE_OVERVIEW: display_submenu_check(key_value); break;
+        case MENU_PAGE_LEFT_MOTOR: display_motor(&L_pid, l_speed_now, current_l_pwm_duty, key_value, 0); break;
+        case MENU_PAGE_RIGHT_MOTOR: display_motor(&R_pid, r_speed_now, current_r_pwm_duty, key_value, 1); break;
+        case MENU_PAGE_TURN_PID: display_t(key_value); break;
+        case MENU_PAGE_ERROR_WEIGHTS: display_submenu_ee(key_value); break;
+        case MENU_PAGE_GYRO: display_gyro(key_value); break;
+        case MENU_PAGE_GYRO_DATA: display_g(key_value); break;
+        case MENU_PAGE_STRAIGHT: display_straight_param(key_value); break;
+        case MENU_PAGE_RIGHT_ANGLE: display_right_angle_param(key_value); break;
+        case MENU_PAGE_RING_DEBUG: display_circle_debug_menu(key_value); break;
+        case MENU_PAGE_RING_ADVANCED: display_circle_advanced_menu(key_value); break;
+        case MENU_PAGE_SPEED: display_speed_menu(key_value); break;
+        case MENU_PAGE_CHARGE: display_submenu_charge_debug(key_value); break;
+        case MENU_PAGE_INDUCTANCE4_CALIBRATION: display_inductance4_calibration(key_value); break;
+        case MENU_PAGE_INDUCTANCE4_DATA: display_inductance4_data(); break;
+        case MENU_PAGE_NEGATIVE_PRESSURE_AUTO: display_negative_pressure_auto(key_value); break;
+        case MENU_PAGE_NEGATIVE_PRESSURE_OUTPUT: display_negative_pressure_output(key_value); break;
         default:
-            key_mode = 0;
+            key_mode = MENU_PAGE_HOME;
             break;
     }
+
+            if (guide_state != GUIDE_IDLE)
+            {
+                negative_pressure_set_enabled(0);
+            }
 
             delay_ms(20);
             upload_inductance_diagnostics();
@@ -692,7 +699,7 @@ void main()
 				// ASCII-cleaned legacy comment.
 				if (key_value == 4) {
 						lcd_clear(WHITE); // ASCII-cleaned legacy comment.
-						if (key_mode >= (menu_sign - 1)) { 
+						if (key_mode >= (MENU_PAGE_COUNT - 1)) {
 								key_mode = -1;
 						} else { // ASCII-cleaned legacy comment.
 						}
@@ -701,7 +708,7 @@ void main()
 				else if (key_value == KEY_EVENT_PAGE_PREV) { // ASCII-cleaned legacy comment.
 						lcd_clear(WHITE); // ASCII-cleaned legacy comment.
 						if (key_mode <= -1) {
-								key_mode = (menu_sign - 1);
+								key_mode = (MENU_PAGE_COUNT - 1);
 						} else { // ASCII-cleaned legacy comment.
 						}
 				}

@@ -71,8 +71,8 @@ void init(void)
 			
 		gpio_mode(P2_6,GPO_PP);
 		gpio_mode(P7_4,GPO_PP);
-		gpio_mode(P0_7,GPO_PP);
 		gpio_mode(P5_2,GPO_PP);
+		negative_pressure_init();
 
         gpio_init(IO_P70, GPI, GPIO_HIGH, GPI_PULL_UP);
         gpio_init(IO_P71, GPI, GPIO_HIGH, GPI_PULL_UP);
@@ -156,10 +156,11 @@ char pwm_state_charge = 255;
 uint8 Pwmout =0;
 void key_scan_cycle_pwm_state(void)
 {
-    static uint8 raw70 = 1, stable70 = 1, cnt70 = 0;
-    static uint8 raw71 = 1, stable71 = 1, cnt71 = 0;
-    static uint8 raw72 = 1, stable72 = 1, cnt72 = 0;
-    static uint8 raw73 = 1, stable73 = 1, cnt73 = 0;
+    static uint8 raw70 = 0, stable70 = 0, cnt70 = 0;
+    static uint8 raw71 = 0, stable71 = 0, cnt71 = 0;
+    static uint8 raw72 = 0, stable72 = 0, cnt72 = 0;
+    static uint8 raw73 = 0, stable73 = 0, cnt73 = 0;
+    static uint8 raw75 = 0, stable75 = 0, cnt75 = 0;
 
     static uint8 prev70_down = 0;
     static uint8 prev71_down = 0;
@@ -167,19 +168,20 @@ void key_scan_cycle_pwm_state(void)
     static uint8 prev73_down = 0;
 
     static uint8 key70_long_sent = 0;
-    static uint8 key71_long_sent = 0;
-    static uint8 key70_combo_used = 0;
-    static uint8 key71_combo_used = 0;
-    static uint8 combo_sent = 0;
+    static uint8 key73_long_sent = 0;
+    static uint8 combo70_used = 0;
+    static uint8 combo73_used = 0;
+    static uint8 combo73_long_sent = 0;
 
     static uint16 key70_ticks = 0;
-    static uint16 key71_ticks = 0;
-    static uint16 combo_ticks = 0;
+    static uint16 key73_ticks = 0;
+    static uint16 combo73_ticks = 0;
 
     uint8 cur70 = (P70 == 0) ? 1 : 0;
     uint8 cur71 = (P71 == 0) ? 1 : 0;
     uint8 cur72 = (P72 == 0) ? 1 : 0;
     uint8 cur73 = (P73 == 0) ? 1 : 0;
+    uint8 cur75 = (P75 == 0) ? 1 : 0;
 
     if (cur70 != raw70) { raw70 = cur70; cnt70 = UI_DEBOUNCE_TICKS; }
     else if (cnt70 > 0) { cnt70--; if (cnt70 == 0) stable70 = raw70; }
@@ -193,28 +195,41 @@ void key_scan_cycle_pwm_state(void)
     if (cur73 != raw73) { raw73 = cur73; cnt73 = UI_DEBOUNCE_TICKS; }
     else if (cnt73 > 0) { cnt73--; if (cnt73 == 0) stable73 = raw73; }
 
+    if (cur75 != raw75) { raw75 = cur75; cnt75 = UI_DEBOUNCE_TICKS; }
+    else if (cnt75 > 0) { cnt75--; if (cnt75 == 0) stable75 = raw75; }
+
     if (stable72 && !prev72_down)
     {
-        if (P75 == 0) post_ui_key_event(KEY_EVENT_ADJ_DEC);
+        if (stable75) post_ui_key_event(KEY_EVENT_ADJ_DEC);
         else post_ui_key_event(KEY_EVENT_ADJ_INC);
     }
 
-    if (stable73 && !prev73_down)
+    if (stable71 && !prev71_down)
     {
-        post_ui_key_event(KEY_EVENT_ITEM_NEXT);
+        post_ui_key_event(KEY_EVENT_PAGE_NEXT);
     }
 
-    if (stable70 && stable71)
+    if (stable70 && stable73)
     {
-        key70_combo_used = 1;
-        key71_combo_used = 1;
-
-        if (combo_ticks < UI_LONG_PRESS_TICKS) combo_ticks++;
-        if (combo_ticks >= UI_LONG_PRESS_TICKS && !combo_sent)
+        if (!prev70_down || !prev73_down)
         {
-            combo_sent = 1;
+            combo73_ticks = 0;
+            combo70_used = 0;
+            combo73_used = 0;
+            combo73_long_sent = 0;
+        }
+        else if (combo73_ticks < UI_LONG_PRESS_TICKS)
+        {
+            combo73_ticks++;
+        }
+
+        if (combo73_ticks >= UI_LONG_PRESS_TICKS && !combo73_long_sent)
+        {
+            combo73_long_sent = 1;
+            combo70_used = 1;
+            combo73_used = 1;
             key70_long_sent = 1;
-            key71_long_sent = 1;
+            key73_long_sent = 1;
             pwm_state = 2;
             Pwmout = pwm_state;
             post_ui_key_event(KEY_EVENT_ENTER_CLEAN);
@@ -222,17 +237,17 @@ void key_scan_cycle_pwm_state(void)
     }
     else
     {
-        combo_ticks = 0;
-        combo_sent = 0;
+        combo73_ticks = 0;
+        combo73_long_sent = 0;
     }
 
-    if (stable70 && !stable71)
+    if (stable70 && !stable73)
     {
         if (!prev70_down)
         {
             key70_ticks = 0;
             key70_long_sent = 0;
-            key70_combo_used = 0;
+            combo70_used = 0;
         }
         else if (key70_ticks < UI_LONG_PRESS_TICKS)
         {
@@ -248,45 +263,45 @@ void key_scan_cycle_pwm_state(void)
             post_ui_key_event(KEY_EVENT_RUN_TOGGLE);
         }
     }
-    else if (!stable70 && prev70_down)
+    else if (prev70_down)
     {
-        if (!key70_long_sent && !key70_combo_used)
+        if (!key70_long_sent && !combo70_used && key70_ticks > 0U)
         {
             post_ui_key_event(KEY_EVENT_PAGE_PREV);
         }
         key70_ticks = 0;
         key70_long_sent = 0;
-        key70_combo_used = 0;
+        combo70_used = 0;
     }
 
-    if (stable71 && !stable70)
+    if (stable73 && !stable70)
     {
-        if (!prev71_down)
+        if (!prev73_down)
         {
-            key71_ticks = 0;
-            key71_long_sent = 0;
-            key71_combo_used = 0;
+            key73_ticks = 0;
+            key73_long_sent = 0;
+            combo73_used = 0;
         }
-        else if (key71_ticks < UI_LONG_PRESS_TICKS)
+        else if (key73_ticks < UI_LONG_PRESS_TICKS)
         {
-            key71_ticks++;
+            key73_ticks++;
         }
 
-        if (key71_ticks >= UI_LONG_PRESS_TICKS && !key71_long_sent)
+        if (key73_ticks >= UI_LONG_PRESS_TICKS && !key73_long_sent)
         {
-            key71_long_sent = 1;
+            key73_long_sent = 1;
             post_ui_key_event(KEY_EVENT_SAVE_ALL);
         }
     }
-    else if (!stable71 && prev71_down)
+    else if (prev73_down)
     {
-        if (!key71_long_sent && !key71_combo_used)
+        if (!key73_long_sent && !combo73_used && key73_ticks > 0U)
         {
-            post_ui_key_event(KEY_EVENT_PAGE_NEXT);
+            post_ui_key_event(KEY_EVENT_ITEM_NEXT);
         }
-        key71_ticks = 0;
-        key71_long_sent = 0;
-        key71_combo_used = 0;
+        key73_ticks = 0;
+        key73_long_sent = 0;
+        combo73_used = 0;
     }
 
     prev70_down = stable70;

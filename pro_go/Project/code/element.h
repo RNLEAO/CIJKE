@@ -65,6 +65,7 @@ void element4_init(void);
 float element4_process(float track_error);
 uint8 element4_get_speed_override(float *left_target, float *right_target);
 const char *element4_state_name(void);
+uint8 element4_negative_pressure_request(void);
 
 void check_hall_sensor(void);
 void Circle_detect(void);

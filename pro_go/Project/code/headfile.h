@@ -12,6 +12,8 @@
 #include "menu.h"
 #include "vofa.h"
 #include "element.h"
+#include "negative_pressure.h"
+#include "negative_pressure_menu.h"
 #include "inductance4.h"
 #include "inductance4_menu.h"
 #include "out_control.h"

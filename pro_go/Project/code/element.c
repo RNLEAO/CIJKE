@@ -407,6 +407,13 @@ const char *element4_state_name(void)
     }
 }
 
+uint8 element4_negative_pressure_request(void)
+{
+    return element4_state == ELEMENT4_RING_ENTER
+        || element4_state == ELEMENT4_RING_HOLD
+        || element4_state == ELEMENT4_RING_EXIT;
+}
+
 void check_hall_sensor(void)
 {
     if (!hall_triggered)
