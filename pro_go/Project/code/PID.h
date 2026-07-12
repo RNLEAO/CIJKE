@@ -1,0 +1,52 @@
+
+#ifndef __PID_H_
+#define __PID_H_
+
+typedef struct{
+       float kp;
+       float ki;
+       float kd;
+       float kp1;
+       float kp2;
+			 float kd2;
+
+       int limit_max;
+       int limit_min;
+
+       float integral_max;
+       float integral_min;
+			 float	MaxOut;
+				
+       float err;
+       float err_sum;
+       float err_last;
+			 float d_err;
+			 float last;
+
+       float out;
+       float integral_out;
+       float kp_out;
+       float kd_out;
+	     float ki_out;
+       float Target;
+			 float Target_base;
+
+       float now;
+			 
+
+}_PID;
+
+extern _PID R_pid,L_pid,Turn_PID,Gyro_PID;
+extern _PID ang_pid;  // 左电机PID控制器
+
+
+
+float IncPID(float Encoder, float Target, _PID* sptr);
+float PositionPID(float Encoder, float Target, _PID* sptr);
+float GyroPositionPID(float gyro_now, float Target, _PID* sptr);						 
+float turn_PstPID(float turn_error, _PID* sptr);
+void PID_Set_turn(_PID* sptr, float p, float i, float d, float p1);
+void PID_Set_inc(_PID* sptr, float p, float i, float d);
+
+
+#endif

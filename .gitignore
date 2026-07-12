@@ -15,3 +15,12 @@
 # Local backup snapshots
 **/*.bak
 **/*.bak_*
+
+# Release artifacts kept for this branch
+**/out_file/*
+!pro_go/Project/mdk/out_file/
+!pro_go/Project/mdk/out_file/CIJIANKE_EM.hex
+!pro_go/Project/mdk/out_file/CIJIANKE_EM.build_log.htm
+
+# Microsoft Office temporary lock files
+**/~$*
