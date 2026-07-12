@@ -7,7 +7,7 @@
 
   <Targets>
     <Target>
-      <TargetName>STC32G12K128</TargetName>
+      <TargetName>STC32G12K128_NEG_PRESS_STAGE4_TEST</TargetName>
       <ToolsetNumber>0x1</ToolsetNumber>
       <ToolsetName>MCS-251</ToolsetName>
       <uAC6>0</uAC6>
@@ -45,14 +45,14 @@
             <NotGenerated>0</NotGenerated>
             <InvalidFlash>1</InvalidFlash>
           </TargetStatus>
-          <OutputDirectory>.\Out_File\</OutputDirectory>
-          <OutputName>SEEKFREE</OutputName>
+          <OutputDirectory>.\Out_File\NEG_PRESS_STAGE4_TEST\</OutputDirectory>
+          <OutputName>NEG_PRESS_STAGE4_TEST</OutputName>
           <CreateExecutable>1</CreateExecutable>
           <CreateLib>0</CreateLib>
           <CreateHexFile>1</CreateHexFile>
           <DebugInformation>1</DebugInformation>
           <BrowseInformation>1</BrowseInformation>
-          <ListingPath>.\Out_File\</ListingPath>
+          <ListingPath>.\Out_File\NEG_PRESS_STAGE4_TEST\</ListingPath>
           <HexFormatSelection>1</HexFormatSelection>
           <Merge32K>0</Merge32K>
           <CreateBatchFile>0</CreateBatchFile>
@@ -270,7 +270,7 @@
             <AcaOpt>0</AcaOpt>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define></Define>
+              <Define>NEGATIVE_PRESSURE_STAGE4_TEST_PROJECT</Define>
               <Undefine></Undefine>
               <IncludePath>..\..\Libraries\libraries;..\..\Libraries\seekfree_libraries;..\..\Libraries\seekfree_peripheral;..\CODE;..\USER\inc;..\USER\src;..\..\Libraries\seekfree_components;..\USER\inc;..\USER\src;..\MDK</IncludePath>
             </VariousControls>
@@ -605,6 +605,11 @@
               <FilePath>..\..\Libraries\doc\version.txt</FilePath>
             </File>
             <File>
+              <FileName>NEGATIVE_PRESSURE_STAGE4_TEST_README.md</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\NEGATIVE_PRESSURE_STAGE4_TEST_README.md</FilePath>
+            </File>
+            <File>
               <FileName>进度.txt</FileName>
               <FileType>5</FileType>
               <FilePath>.\进度.txt</FilePath>
@@ -612,7 +617,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>user_c</GroupName>
+          <GroupName>stage4_test_code</GroupName>
           <Files>
             <File>
               <FileName>isr.c</FileName>
@@ -667,7 +672,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>user_h</GroupName>
+          <GroupName>stage4_test_headers</GroupName>
           <Files>
             <File>
               <FileName>isr.h</FileName>
