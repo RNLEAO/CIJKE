@@ -1,7 +1,5 @@
 #include "legacy_compat.h"
 
-#define LEGACY_PWM_DUTY_MAX 3000UL
-
 void board_init(void)
 {
     clock_init(SYSTEM_CLOCK_33_1776M);
@@ -32,23 +30,6 @@ uint16 adc_once(ADCN_enum channel, ADCRES_enum resolution)
 {
     adc_init(channel, resolution);
     return adc_convert(channel);
-}
-
-void pwm_duty(pwm_channel_enum channel, uint32 legacy_duty)
-{
-    uint32 duty;
-
-    if (legacy_duty >= LEGACY_PWM_DUTY_MAX)
-    {
-        duty = PWM_DUTY_MAX;
-    }
-    else
-    {
-        duty = (legacy_duty * PWM_DUTY_MAX + LEGACY_PWM_DUTY_MAX / 2UL)
-             / LEGACY_PWM_DUTY_MAX;
-    }
-
-    pwm_set_duty(channel, duty);
 }
 
 void gpio_mode(PIN_enum pin, GPIOMODE_enum mode)

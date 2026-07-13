@@ -41,8 +41,8 @@ void out_pwm(){
 		{
 			LEFT_MOTOR_DIR = 0;
 			RIGHT_MOTOR_DIR = 0;
-			pwm_duty(LEFT_MOTOR_PWM, 0);
-			pwm_duty(RIGHT_MOTOR_PWM, 0);
+			pwm_set_duty(LEFT_MOTOR_PWM, 0);
+			pwm_set_duty(RIGHT_MOTOR_PWM, 0);
 			current_l_pwm_duty = 0;
 			current_r_pwm_duty = 0;
 			current_l_pwm_inc=0;
@@ -56,17 +56,17 @@ void out_pwm(){
 			if(current_l_pwm_duty > 0) // 正占空比，期望电机正转
 			{
 				LEFT_MOTOR_DIR = 1;
-				pwm_duty(LEFT_MOTOR_PWM, (uint32)current_l_pwm_duty);
+				pwm_set_duty(LEFT_MOTOR_PWM, (uint32)current_l_pwm_duty);
 			}
 			else if(current_l_pwm_duty < 0) // 负占空比，期望电机反转
 			{
 				LEFT_MOTOR_DIR = 0;
-				pwm_duty(LEFT_MOTOR_PWM, (uint32)(-current_l_pwm_duty));
+				pwm_set_duty(LEFT_MOTOR_PWM, (uint32)(-current_l_pwm_duty));
 			}
 			else // 占空比为0，电机停止
 			{
 				LEFT_MOTOR_DIR = 0;
-				pwm_duty(LEFT_MOTOR_PWM, 0);
+				pwm_set_duty(LEFT_MOTOR_PWM, 0);
 			}
 
 			/******************************************************
@@ -75,17 +75,17 @@ void out_pwm(){
 			if(current_r_pwm_duty > 0) // 正占空比 -> 右轮正转
 			{
 				RIGHT_MOTOR_DIR = 1;
-				pwm_duty(RIGHT_MOTOR_PWM, (uint32)current_r_pwm_duty);
+				pwm_set_duty(RIGHT_MOTOR_PWM, (uint32)current_r_pwm_duty);
 			}
 			else if(current_r_pwm_duty < 0) // 负占空比 -> 右轮反转
 			{
 				RIGHT_MOTOR_DIR = 0;
-				pwm_duty(RIGHT_MOTOR_PWM, (uint32)(-current_r_pwm_duty));
+				pwm_set_duty(RIGHT_MOTOR_PWM, (uint32)(-current_r_pwm_duty));
 			}
 			else // 占空比为0 -> 右轮停止
 			{
 				RIGHT_MOTOR_DIR = 0;
-				pwm_duty(RIGHT_MOTOR_PWM, 0);
+				pwm_set_duty(RIGHT_MOTOR_PWM, 0);
 			}
 		}
 

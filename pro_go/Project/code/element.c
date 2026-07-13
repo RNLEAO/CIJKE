@@ -7,7 +7,6 @@ extern void reset_motion_pid_state(void);
 #define ELEMENT4_RECOVER_TICKS         25U
 #define ELEMENT4_RIGHT_ANGLE_TIMEOUT  140U
 #define ELEMENT4_RING_TIMEOUT         500U
-#define ELEMENT4_LINE_SUM_MIN          35.0f
 #define ELEMENT4_LINE_ERROR_MAX         0.45f
 
 Element4State element4_state = ELEMENT4_TRACK;
@@ -72,7 +71,7 @@ static uint8 line_reacquired(float track_error)
 {
     float total = L + LM + RM + R;
 
-    return total >= ELEMENT4_LINE_SUM_MIN
+    return total >= (float)INDUCTANCE4_LINE_LOST_SUM
         && absolute_float(track_error) <= ELEMENT4_LINE_ERROR_MAX;
 }
 

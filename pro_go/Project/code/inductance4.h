@@ -7,6 +7,9 @@
 #define INDUCTANCE4_CHANNEL_COUNT 4
 #define INDUCTANCE4_SAMPLE_COUNT  5
 #define INDUCTANCE4_NORM_MAX      128
+#define INDUCTANCE4_LINE_LOST_SUM 35U
+#define INDUCTANCE4_LINE_FOUND_SUM 50U
+#define INDUCTANCE4_LINE_CONFIRM_TICKS 3U
 
 typedef enum
 {
@@ -40,6 +43,8 @@ extern uint8 inductance4_calibration_failed_channel;
 
 void inductance4_init(void);
 void inductance4_update(void);
+uint8 inductance4_line_is_present(void);
+uint16 inductance4_get_line_sum(void);
 
 uint16 inductance4_trimmed_average(ADCN_enum channel);
 int16 inductance4_normalize(uint16 value, uint16 max_value, uint16 min_value);

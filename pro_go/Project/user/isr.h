@@ -40,6 +40,8 @@ extern float current_r_pwm_inc;
 
 extern float current_l_pwm_inc_last;
 extern float current_r_pwm_inc_last;
+unsigned char motion_line_wait_is_active(void);
+unsigned char motion_direction_guard_mask(void);
 
 
 extern float mid_dynamic_weight;
@@ -114,5 +116,3 @@ extern float speed[5];
 
 
 #endif
-
-

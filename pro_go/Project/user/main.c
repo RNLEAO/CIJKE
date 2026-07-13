@@ -41,7 +41,7 @@ static uint16 xdata guide_capture_max[INDUCTANCE4_CHANNEL_COUNT];
 static uint16 xdata guide_step_min[INDUCTANCE4_CHANNEL_COUNT];
 static uint16 xdata guide_step_max[INDUCTANCE4_CHANNEL_COUNT];
 static uint8 xdata diagnostic_channel;
-static uint8 xdata diagnostic_signal_mask;
+static uint8 xdata diagnostic_adc_mask;
 static uint8 xdata guide_command_length;
 static uint8 xdata guide_step;
 static GuideState xdata guide_state;
@@ -343,11 +343,29 @@ static void guide_poll_commands(void)
     }
 }
 
-static const int8 *diagnostic_signal_text(void)
+static const int8 *diagnostic_line_text(void)
 {
-    return (15U == diagnostic_signal_mask)
+    return inductance4_line_is_present()
+        ? (const int8 *)"FOUND"
+        : (const int8 *)"LOST";
+}
+
+static const int8 *diagnostic_adc_text(void)
+{
+    return (15U == diagnostic_adc_mask)
         ? (const int8 *)"OK"
         : (const int8 *)"BAD";
+}
+
+static const int8 *diagnostic_guard_text(void)
+{
+    switch (motion_direction_guard_mask())
+    {
+        case 0x01U: return (const int8 *)"L";
+        case 0x02U: return (const int8 *)"R";
+        case 0x03U: return (const int8 *)"LR";
+        default: return (const int8 *)"NONE";
+    }
 }
 
 static const int8 *diagnostic_calibration_text(void)
@@ -364,9 +382,20 @@ static const int8 *diagnostic_calibration_text(void)
 
 static const int8 *diagnostic_motor_text(void)
 {
-    return pwm_state
-        ? (const int8 *)"RUN"
-        : (const int8 *)"STOP";
+    if (pwm_state == 1U)
+    {
+        if (motion_line_wait_is_active())
+        {
+            return (const int8 *)"WAIT_LINE";
+        }
+        return (const int8 *)"RUN";
+    }
+    if (pwm_state == 2U)
+    {
+        return (const int8 *)"PROTECT";
+    }
+
+    return (const int8 *)"STOP";
 }
 
 static void diagnostic_append_u32(const int8 *label, uint32 value)
@@ -414,14 +443,41 @@ static void send_diagnostic_frame(void)
     diagnostic_append_i32((const int8 *)" LM=", (int32)g_inductance4[INDUCTANCE4_LM].normalized);
     diagnostic_append_i32((const int8 *)" RM=", (int32)g_inductance4[INDUCTANCE4_RM].normalized);
     diagnostic_append_i32((const int8 *)" R=", (int32)g_inductance4[INDUCTANCE4_R].normalized);
-    diagnostic_append_i32((const int8 *)" ERR=", (int32)error);
+    diagnostic_append_i32((const int8 *)" ERR_X1000=", (int32)(error * 1000.0f));
     diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
 
-    diagnostic_append_text((const int8 *)"STATUS: SIGNAL=", diagnostic_signal_text());
-    diagnostic_append_u32((const int8 *)" MASK=", (uint32)diagnostic_signal_mask);
+    diagnostic_append_text((const int8 *)"STATUS: LINE=", diagnostic_line_text());
+    diagnostic_append_u32((const int8 *)" SUM=", (uint32)inductance4_get_line_sum());
+    diagnostic_append_text((const int8 *)" ADC=", diagnostic_adc_text());
+    diagnostic_append_u32((const int8 *)" MASK=", (uint32)diagnostic_adc_mask);
     diagnostic_append_text((const int8 *)" CAL=", diagnostic_calibration_text());
     diagnostic_append_text((const int8 *)" MOTOR=", diagnostic_motor_text());
-    diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n\r\n");
+    diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+    if (guide_state == GUIDE_IDLE)
+    {
+        diagnostic_append_i32((const int8 *)"CTRL: ERR_X1000=", (int32)(error * 1000.0f));
+        diagnostic_append_i32((const int8 *)" TURN_X10=", (int32)(Turn_PID.out * 10.0f));
+        diagnostic_append_text((const int8 *)" ELEMENT=", (const int8 *)element4_state_name());
+        diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+        diagnostic_append_i32((const int8 *)"SPEED: LT_X10=", (int32)(L_pid.Target * 10.0f));
+        diagnostic_append_i32((const int8 *)" RT_X10=", (int32)(R_pid.Target * 10.0f));
+        diagnostic_append_i32((const int8 *)" LS_X10=", (int32)(l_speed_now * 10.0f));
+        diagnostic_append_i32((const int8 *)" RS_X10=", (int32)(r_speed_now * 10.0f));
+        diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+        diagnostic_append_i32((const int8 *)"OUTPUT: LPWM=", (int32)current_l_pwm_duty);
+        diagnostic_append_i32((const int8 *)" RPWM=", (int32)current_r_pwm_duty);
+        diagnostic_append_u32((const int8 *)" LDIR=", (uint32)LEFT_MOTOR_DIR);
+        diagnostic_append_u32((const int8 *)" RDIR=", (uint32)RIGHT_MOTOR_DIR);
+        diagnostic_append_text((const int8 *)" GUARD=", diagnostic_guard_text());
+        diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n\r\n");
+    }
+    else
+    {
+        diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+    }
 
     if (guide_state == GUIDE_COLLECTING)
     {
@@ -495,7 +551,7 @@ static void send_diagnostic_frame(void)
 static void upload_inductance_diagnostics(void)
 {
     static uint8 upload_divider = 0;
-    diagnostic_signal_mask = 0U;
+    diagnostic_adc_mask = 0U;
 
     if (guide_state == GUIDE_IDLE)
     {
@@ -523,7 +579,7 @@ static void upload_inductance_diagnostics(void)
         if (g_inductance4[diagnostic_channel].filtered > 4U
             && g_inductance4[diagnostic_channel].filtered < 4091U)
         {
-            diagnostic_signal_mask |= (uint8)(1U << diagnostic_channel);
+            diagnostic_adc_mask |= (uint8)(1U << diagnostic_channel);
         }
 
     }

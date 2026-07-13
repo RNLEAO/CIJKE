@@ -68,6 +68,64 @@ static uint16 xdata calibration_max[INDUCTANCE4_CHANNEL_COUNT];
 static uint16 xdata calibration_adjusted_min[INDUCTANCE4_CHANNEL_COUNT];
 static uint16 xdata calibration_adjusted_max[INDUCTANCE4_CHANNEL_COUNT];
 static uint8 calibration_auto_capture = 1U;
+static vuint16 inductance4_line_sum = 0U;
+static vuint8 inductance4_line_present = 0U;
+static uint8 inductance4_line_found_ticks = 0U;
+static uint8 inductance4_line_lost_ticks = 0U;
+
+static void inductance4_update_line_state(void)
+{
+    uint8 i;
+    uint16 total = 0U;
+
+    for (i = 0U; i < INDUCTANCE4_CHANNEL_COUNT; i++)
+    {
+        total = (uint16)(total + (uint16)g_inductance4[i].normalized);
+    }
+
+    inductance4_line_sum = total;
+
+    if (inductance4_line_present)
+    {
+        inductance4_line_found_ticks = 0U;
+        if (total < INDUCTANCE4_LINE_LOST_SUM)
+        {
+            if (inductance4_line_lost_ticks < INDUCTANCE4_LINE_CONFIRM_TICKS)
+            {
+                inductance4_line_lost_ticks++;
+            }
+            if (inductance4_line_lost_ticks >= INDUCTANCE4_LINE_CONFIRM_TICKS)
+            {
+                inductance4_line_present = 0U;
+                inductance4_line_lost_ticks = 0U;
+            }
+        }
+        else
+        {
+            inductance4_line_lost_ticks = 0U;
+        }
+    }
+    else
+    {
+        inductance4_line_lost_ticks = 0U;
+        if (total >= INDUCTANCE4_LINE_FOUND_SUM)
+        {
+            if (inductance4_line_found_ticks < INDUCTANCE4_LINE_CONFIRM_TICKS)
+            {
+                inductance4_line_found_ticks++;
+            }
+            if (inductance4_line_found_ticks >= INDUCTANCE4_LINE_CONFIRM_TICKS)
+            {
+                inductance4_line_present = 1U;
+                inductance4_line_found_ticks = 0U;
+            }
+        }
+        else
+        {
+            inductance4_line_found_ticks = 0U;
+        }
+    }
+}
 
 static uint16 config_checksum(const uint8 *bytes, uint16 length)
 {
@@ -109,6 +167,11 @@ void inductance4_init(void)
         g_inductance4[i].normalized = 0;
         g_inductance4[i].healthy = 1;
     }
+
+    inductance4_line_sum = 0U;
+    inductance4_line_present = 0U;
+    inductance4_line_found_ticks = 0U;
+    inductance4_line_lost_ticks = 0U;
 }
 
 uint16 inductance4_trimmed_average(ADCN_enum channel)
@@ -204,7 +267,18 @@ void inductance4_update(void)
     R = (float)g_inductance4[INDUCTANCE4_R].normalized;
     MID = 0.0f;
 
+    inductance4_update_line_state();
     inductance4_check_health();
+}
+
+uint8 inductance4_line_is_present(void)
+{
+    return inductance4_line_present;
+}
+
+uint16 inductance4_get_line_sum(void)
+{
+    return inductance4_line_sum;
 }
 
 float inductance4_calculate_error(void)

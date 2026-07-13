@@ -57,7 +57,6 @@ void delay_us(uint32 us);
 
 uint16 adc_once(ADCN_enum channel, ADCRES_enum resolution);
 
-void pwm_duty(pwm_channel_enum channel, uint32 legacy_duty);
 
 void gpio_mode(PIN_enum pin, GPIOMODE_enum mode);
 
