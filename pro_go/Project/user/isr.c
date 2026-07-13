@@ -477,6 +477,7 @@ void TM1_Isr() interrupt 3
 
 				//protect
 		key_scan_cycle_pwm_state();
+		negative_pressure_tick();
 
 		if(pwm_state==2){
 		mot_inc=0;

@@ -16,6 +16,8 @@
 #include "inductance4_menu.h"
 #include "out_control.h"
 #include "motion_runtime.h"
+#include "negative_pressure.h"
+#include "negative_pressure_menu.h"
 
 #define BEEP P67
 #define ON   1

@@ -9,7 +9,7 @@
 
 uint8 key_value;
 int8 key_mode=0;                 
-uint8 menu_sign=16;
+uint8 menu_sign=17;
 uint8 display_mode=0;
 
 
@@ -741,6 +741,7 @@ void main()
 
 		
 		init();
+		negative_pressure_init();
 		motion_runtime_force_stop();
 		if (motion_runtime_init_imu())
 		{
@@ -856,6 +857,7 @@ void main()
         case 13: display_submenu_charge_debug(key_value); break;
         case 14: display_inductance4_calibration(key_value); break;
         case 15: display_inductance4_data(); break;
+        case 16: display_negative_pressure_bench(key_value); break;
         default:
             key_mode = 0;
             break;
