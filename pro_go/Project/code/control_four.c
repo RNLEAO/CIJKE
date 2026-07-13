@@ -58,6 +58,8 @@ void init(void)
 
 		ctimer_count_init(MOTOR1_ENCODER);
 		ctimer_count_init(MOTOR2_ENCODER);
+		gpio_init(IO_P35, GPI, GPIO_LOW, GPI_IMPEDANCE);
+		gpio_init(IO_P53, GPI, GPIO_LOW, GPI_IMPEDANCE);
 		delay_ms(10);
 
 		gpio_init(IO_P64, GPO, GPIO_LOW, GPO_PUSH_PULL);
@@ -243,7 +245,9 @@ void key_scan_cycle_pwm_state(void)
         {
             key70_long_sent = 1;
             if (pwm_state == 2) pwm_state = 0;
-            else pwm_state = (pwm_state == 1) ? 0 : 1;
+            else if (pwm_state == 1) pwm_state = 0;
+            else if (motion_runtime_can_run()) pwm_state = 1;
+            else pwm_state = 0;
             Pwmout = pwm_state;
             post_ui_key_event(KEY_EVENT_RUN_TOGGLE);
         }

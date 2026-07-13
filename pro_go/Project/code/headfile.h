@@ -15,6 +15,7 @@
 #include "inductance4.h"
 #include "inductance4_menu.h"
 #include "out_control.h"
+#include "motion_runtime.h"
 
 #define BEEP P67
 #define ON   1

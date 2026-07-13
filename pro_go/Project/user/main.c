@@ -18,9 +18,9 @@ extern int zhijiao_flag;
 
 #define DIAGNOSTIC_UPLOAD_DIVIDER_NORMAL 10U
 #define DIAGNOSTIC_UPLOAD_DIVIDER_GUIDE  50U
-#define DIAGNOSTIC_TX_BUFFER_SIZE 520U
+#define DIAGNOSTIC_TX_BUFFER_SIZE 900U
 #define GUIDE_STEP_COUNT          10U
-#define GUIDE_COMMAND_SIZE        20U
+#define GUIDE_COMMAND_SIZE        32U
 #define GUIDE_CAPTURE_SAMPLES     40U
 
 typedef enum
@@ -271,7 +271,76 @@ static void guide_save(void)
 
 static void guide_process_command(void)
 {
-    if (guide_command_equals((const int8 *)"CAL START"))
+    if (guide_command_equals((const int8 *)"STOP"))
+    {
+        pwm_state = 0U;
+        Pwmout = 0U;
+        reset_motion_pid_state();
+        motion_runtime_force_stop();
+        guide_send_reply("OK: MOTOR STOPPED\r\n");
+    }
+    else if (guide_command_equals((const int8 *)"CLEAR"))
+    {
+        if (motion_runtime_clear_protection())
+        {
+            guide_send_reply("OK: PROTECTION CLEARED, RUN REMAINS LOCKED\r\n");
+        }
+        else
+        {
+            guide_send_reply("ERROR: IMU660RB NOT READY\r\n");
+        }
+    }
+    else if (guide_command_equals((const int8 *)"RUN"))
+    {
+        if (motion_runtime_can_run())
+        {
+            pwm_state = 1U;
+            Pwmout = 1U;
+            guide_send_reply("OK: MOTOR RUN\r\n");
+        }
+        else
+        {
+            pwm_state = 0U;
+            Pwmout = 0U;
+            guide_send_reply("ERROR: RUN LOCKED FOR IMU AND ENCODER DIAGNOSIS\r\n");
+        }
+    }
+    else if (guide_command_equals((const int8 *)"IMU CAL"))
+    {
+        pwm_state = 0U;
+        Pwmout = 0U;
+        motion_runtime_force_stop();
+        interrupt_global_disable();
+        if (motion_runtime_calibrate_imu(400U, 5U))
+        {
+            interrupt_global_enable();
+            guide_send_reply("OK: IMU660RB CALIBRATED, KEEP CAR STILL DURING BOOT\r\n");
+        }
+        else
+        {
+            interrupt_global_enable();
+            guide_send_reply("ERROR: IMU660RB CALIBRATION UNSTABLE\r\n");
+        }
+    }
+    else if (guide_command_equals((const int8 *)"ELEMENTS OFF"))
+    {
+        element4_set_enabled(0U);
+        guide_send_reply("OK: ELEMENTS OFF\r\n");
+    }
+    else if (guide_command_equals((const int8 *)"ELEMENTS ON"))
+    {
+        if (!g_motion_run_unlocked)
+        {
+            element4_set_enabled(0U);
+            guide_send_reply("ERROR: ELEMENTS LOCKED UNTIL BASE TRACKING PASSES\r\n");
+        }
+        else
+        {
+            element4_set_enabled(1U);
+            guide_send_reply("OK: ELEMENTS ON\r\n");
+        }
+    }
+    else if (guide_command_equals((const int8 *)"CAL START"))
     {
         guide_start();
     }
@@ -295,7 +364,7 @@ static void guide_process_command(void)
     }
     else
     {
-        guide_send_reply("ERROR: USE CAL START / NEXT / STATUS / SAVE / CANCEL\r\n");
+        guide_send_reply("ERROR: USE STOP / CLEAR / RUN / IMU CAL / ELEMENTS OFF / CAL START / NEXT / STATUS / SAVE / CANCEL\r\n");
     }
 
     guide_command_length = 0U;
@@ -336,6 +405,12 @@ static void guide_poll_commands(void)
             || guide_command_equals((const int8 *)"SAVE")
             || guide_command_equals((const int8 *)"CANCEL")
             || guide_command_equals((const int8 *)"STATUS")
+            || guide_command_equals((const int8 *)"STOP")
+            || guide_command_equals((const int8 *)"CLEAR")
+            || guide_command_equals((const int8 *)"RUN")
+            || guide_command_equals((const int8 *)"IMU CAL")
+            || guide_command_equals((const int8 *)"ELEMENTS OFF")
+            || guide_command_equals((const int8 *)"ELEMENTS ON")
             || guide_command_equals((const int8 *)"CAL START"))
         {
             guide_process_command();
@@ -382,6 +457,14 @@ static const int8 *diagnostic_calibration_text(void)
 
 static const int8 *diagnostic_motor_text(void)
 {
+    if (pwm_state == 2U)
+    {
+        return (const int8 *)"PROTECT";
+    }
+    if (!g_motion_run_unlocked)
+    {
+        return (const int8 *)"LOCKED";
+    }
     if (pwm_state == 1U)
     {
         if (motion_line_wait_is_active())
@@ -390,11 +473,6 @@ static const int8 *diagnostic_motor_text(void)
         }
         return (const int8 *)"RUN";
     }
-    if (pwm_state == 2U)
-    {
-        return (const int8 *)"PROTECT";
-    }
-
     return (const int8 *)"STOP";
 }
 
@@ -454,6 +532,34 @@ static void send_diagnostic_frame(void)
     diagnostic_append_text((const int8 *)" MOTOR=", diagnostic_motor_text());
     diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
 
+    diagnostic_append_text((const int8 *)"IMU: TYPE=660RB STATE=",
+                           (const int8 *)motion_runtime_imu_state_text());
+    diagnostic_append_i32((const int8 *)" GX_X10=", (int32)(g_imu_gyro_x_dps * 10.0f));
+    diagnostic_append_i32((const int8 *)" GY_X10=", (int32)(g_imu_gyro_y_dps * 10.0f));
+    diagnostic_append_i32((const int8 *)" GZ_X10=", (int32)(g_imu_gyro_z_dps * 10.0f));
+    diagnostic_append_i32((const int8 *)" TURN_X10=", (int32)(g_imu_turn_rate_dps * 10.0f));
+    diagnostic_append_i32((const int8 *)" BZ_X10=", (int32)(g_imu_bias_z_dps * 10.0f));
+    diagnostic_append_text((const int8 *)" AXIS=Z", (const int8 *)"\r\n");
+
+    diagnostic_append_u32((const int8 *)"ENC: LRAW=", (uint32)g_encoder_left_raw);
+    diagnostic_append_u32((const int8 *)" RRAW=", (uint32)g_encoder_right_raw);
+    diagnostic_append_i32((const int8 *)" LSIGNED=", g_encoder_left_signed);
+    diagnostic_append_i32((const int8 *)" RSIGNED=", g_encoder_right_signed);
+    diagnostic_append_u32((const int8 *)" LPHASE=", (uint32)g_encoder_left_phase);
+    diagnostic_append_u32((const int8 *)" RPHASE=", (uint32)g_encoder_right_phase);
+    diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+    diagnostic_append_text((const int8 *)"SAFE: PROTECT=",
+                           (const int8 *)motion_runtime_protect_reason_text());
+    diagnostic_append_text((const int8 *)" ELEMENTS=",
+                           element4_is_enabled()
+                               ? (const int8 *)"ON"
+                               : (const int8 *)"OFF");
+    diagnostic_append_u32((const int8 *)" RUNLOCK=", (uint32)!g_motion_run_unlocked);
+    diagnostic_append_i32((const int8 *)" DUTY_X1000=", (int32)(track_turn_ratio * 1000.0f));
+    diagnostic_append_i32((const int8 *)" LINE_SCALE_X1000=", (int32)(track_line_speed_scale * 1000.0f));
+    diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
     if (guide_state == GUIDE_IDLE)
     {
         diagnostic_append_i32((const int8 *)"CTRL: ERR_X1000=", (int32)(error * 1000.0f));
@@ -469,9 +575,14 @@ static void send_diagnostic_frame(void)
 
         diagnostic_append_i32((const int8 *)"OUTPUT: LPWM=", (int32)current_l_pwm_duty);
         diagnostic_append_i32((const int8 *)" RPWM=", (int32)current_r_pwm_duty);
-        diagnostic_append_u32((const int8 *)" LDIR=", (uint32)LEFT_MOTOR_DIR);
-        diagnostic_append_u32((const int8 *)" RDIR=", (uint32)RIGHT_MOTOR_DIR);
+        diagnostic_append_i32((const int8 *)" LAPPLIED=", (int32)g_motor_left_applied_pwm);
+        diagnostic_append_i32((const int8 *)" RAPPLIED=", (int32)g_motor_right_applied_pwm);
         diagnostic_append_text((const int8 *)" GUARD=", diagnostic_guard_text());
+        diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+        diagnostic_append_u32((const int8 *)"COUNT: LSAT=", (uint32)g_motor_left_saturation_count);
+        diagnostic_append_u32((const int8 *)" RSAT=", (uint32)g_motor_right_saturation_count);
+        diagnostic_append_u32((const int8 *)" LREV=", (uint32)g_motor_left_reversal_count);
+        diagnostic_append_u32((const int8 *)" RREV=", (uint32)g_motor_right_reversal_count);
         diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n\r\n");
     }
     else
@@ -624,20 +735,40 @@ void main()
 //			}
 		
 	// ASCII-cleaned legacy comment.
-		imu660ra_init();
 		lcd_init();  		
 		delay_init();
 		
 
 		
 		init();
+		motion_runtime_force_stop();
+		if (motion_runtime_init_imu())
+		{
+			motion_runtime_calibrate_imu(400U, 5U);
+		}
 		
-		change_speed_Target_base(speed[0]);
 		//flash
 		iap_init();                     
 		load_all_params_from_flash();
 		inductance4_load_config();
 		element4_init();
+		element4_set_enabled(0U);
+		motion_runtime_set_run_unlocked(0U);
+		change_speed_Target_base(0);
+		reset_motion_pid_state();
+		pwm_state = 0U;
+		Pwmout = 0U;
+
+		if (g_imu_runtime_state == IMU_RUNTIME_READY)
+		{
+			wireless_uart_send_string(
+				"BOOT: IMU660RB=OK AXIS=Z MOTOR=LOCKED ELEMENTS=OFF\r\n");
+		}
+		else
+		{
+			wireless_uart_send_string(
+				"BOOT: IMU660RB=ERROR MOTOR=LOCKED ELEMENTS=OFF\r\n");
+		}
 
 		/* Start control interrupts only after every module is ready. */
 		pit_timer_ms(TIM_1, 5);

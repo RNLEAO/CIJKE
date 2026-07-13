@@ -560,14 +560,14 @@
               <FilePath>..\..\libraries\zf_device\zf_device_config.h</FilePath>
             </File>
             <File>
-              <FileName>zf_device_imu660ra.c</FileName>
+              <FileName>zf_device_imu660rb.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\libraries\zf_device\zf_device_imu660ra.c</FilePath>
+              <FilePath>..\..\libraries\zf_device\zf_device_imu660rb.c</FilePath>
             </File>
             <File>
-              <FileName>zf_device_imu660ra.h</FileName>
+              <FileName>zf_device_imu660rb.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\..\libraries\zf_device\zf_device_imu660ra.h</FilePath>
+              <FilePath>..\..\libraries\zf_device\zf_device_imu660rb.h</FilePath>
             </File>
             <File>
               <FileName>zf_device_ips114.c</FileName>
@@ -662,6 +662,11 @@
               <FileType>1</FileType>
               <FilePath>..\code\out_control.c</FilePath>
             </File>
+            <File>
+              <FileName>motion_runtime.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\code\motion_runtime.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -726,6 +731,11 @@
               <FileName>out_control.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\code\out_control.h</FilePath>
+            </File>
+            <File>
+              <FileName>motion_runtime.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\code\motion_runtime.h</FilePath>
             </File>
           </Files>
         </Group>

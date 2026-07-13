@@ -34,61 +34,20 @@ int wait_for_voltage(float target_voltage)
 **************************************************************************/
 
 void out_pwm(){
-	
-	
-	
-		if(pwm_state==0||pwm_state==2)
+		if(pwm_state != 1U)
 		{
-			LEFT_MOTOR_DIR = 0;
-			RIGHT_MOTOR_DIR = 0;
-			pwm_set_duty(LEFT_MOTOR_PWM, 0);
-			pwm_set_duty(RIGHT_MOTOR_PWM, 0);
-			current_l_pwm_duty = 0;
-			current_r_pwm_duty = 0;
-			current_l_pwm_inc=0;
-			current_r_pwm_inc=0;
+			current_l_pwm_duty = 0.0f;
+			current_r_pwm_duty = 0.0f;
+			current_l_pwm_inc = 0.0f;
+			current_r_pwm_inc = 0.0f;
+			motion_runtime_force_stop();
+			return;
 		}
 
-		
-		else if(pwm_state==1)
-		{
-			/* --- 左电机控制 --- */
-			if(current_l_pwm_duty > 0) // 正占空比，期望电机正转
-			{
-				LEFT_MOTOR_DIR = 1;
-				pwm_set_duty(LEFT_MOTOR_PWM, (uint32)current_l_pwm_duty);
-			}
-			else if(current_l_pwm_duty < 0) // 负占空比，期望电机反转
-			{
-				LEFT_MOTOR_DIR = 0;
-				pwm_set_duty(LEFT_MOTOR_PWM, (uint32)(-current_l_pwm_duty));
-			}
-			else // 占空比为0，电机停止
-			{
-				LEFT_MOTOR_DIR = 0;
-				pwm_set_duty(LEFT_MOTOR_PWM, 0);
-			}
-
-			/******************************************************
-			 * 右电机控制 (使用原始逻辑)
-			 ******************************************************/
-			if(current_r_pwm_duty > 0) // 正占空比 -> 右轮正转
-			{
-				RIGHT_MOTOR_DIR = 1;
-				pwm_set_duty(RIGHT_MOTOR_PWM, (uint32)current_r_pwm_duty);
-			}
-			else if(current_r_pwm_duty < 0) // 负占空比 -> 右轮反转
-			{
-				RIGHT_MOTOR_DIR = 0;
-				pwm_set_duty(RIGHT_MOTOR_PWM, (uint32)(-current_r_pwm_duty));
-			}
-			else // 占空比为0 -> 右轮停止
-			{
-				RIGHT_MOTOR_DIR = 0;
-				pwm_set_duty(RIGHT_MOTOR_PWM, 0);
-			}
-		}
-
+		motion_runtime_apply_outputs(
+			current_l_pwm_duty,
+			current_r_pwm_duty,
+			1U);
 }
 
 
@@ -98,21 +57,39 @@ void out_pwm(){
 
 void acquire_sensor_data(void)
 {
-    imu660ra_get_gyro();
-    gyro_data[0] = imu660ra_gyro_transition(imu660ra_gyro_x);
+    uint16 left_raw;
+    uint16 right_raw;
+    uint8 left_phase;
+    uint8 right_phase;
+    int32 left_signed;
+    int32 right_signed;
 
-    l_encoder = (float)ctimer_count_read(MOTOR1_ENCODER);  
-    r_encoder = (float)ctimer_count_read(MOTOR2_ENCODER);  
+    motion_runtime_update_imu();
+
+    left_raw = ctimer_count_read(MOTOR1_ENCODER);
+    right_raw = ctimer_count_read(MOTOR2_ENCODER);
+    left_phase = MOTOR1_DIR ? 1U : 0U;
+    right_phase = MOTOR2_DIR ? 1U : 0U;
 
     ctimer_count_clean(MOTOR1_ENCODER);  
     ctimer_count_clean(MOTOR2_ENCODER); 
 
+    /* Apply direction to the current sample before filtering it. */
+    left_signed = left_phase ? (int32)left_raw : -(int32)left_raw;
+    right_signed = right_phase ? -(int32)right_raw : (int32)right_raw;
+
+    l_encoder = (float)left_signed;
+    r_encoder = (float)right_signed;
     l_speed_now = l_speed_now * 0.2f + l_encoder * 0.8f;
     r_speed_now = r_speed_now * 0.2f + r_encoder * 0.8f;
 
-    // Motor direction adjustment
-    if (MOTOR1_DIR == 0) l_speed_now = -l_speed_now;
-    if (MOTOR2_DIR == 1) r_speed_now = -r_speed_now;
+    motion_runtime_set_encoder_sample(
+        left_raw,
+        right_raw,
+        left_signed,
+        right_signed,
+        left_phase,
+        right_phase);
 
 }
 

@@ -61,10 +61,14 @@ extern float ring_inner_low;
 extern float ring_inner_active;
 extern float ring_side_diff;
 
+extern uint8 element4_enabled;
+
 void element4_init(void);
 float element4_process(float track_error);
 uint8 element4_get_speed_override(float *left_target, float *right_target);
 const char *element4_state_name(void);
+void element4_set_enabled(uint8 enabled);
+uint8 element4_is_enabled(void);
 
 void check_hall_sensor(void);
 void Circle_detect(void);

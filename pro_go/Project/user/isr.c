@@ -198,6 +198,8 @@ float dir_loop_limit=450;
 float dir_enlarge=1;
 float speed_damping=0;
 float speed_damping_enlarge=0.38f;
+float track_turn_ratio=0.0f;
+float track_line_speed_scale=0.0f;
 
 float err_H=1.5;
 float err_X=1;
@@ -287,9 +289,11 @@ unsigned char motion_direction_guard_mask(void)
 
 void TM1_Isr() interrupt 3
 {
-			static int timer_call_count = 0; 
 			float override_left_target;
 			float override_right_target;
+			float track_base_target;
+			float left_pid_delta;
+			float right_pid_delta;
 
 			TIM1_CLEAR_FLAG;
 
@@ -298,6 +302,13 @@ void TM1_Isr() interrupt 3
 		/********************* Sensor acquisition and safety ********************/
 			
 			acquire_sensor_data();
+			if (pwm_state == 1U && !motion_runtime_can_run())
+			{
+				motion_runtime_trigger_protection(
+					g_imu_runtime_state == IMU_RUNTIME_READY
+						? MOTION_PROTECT_RUN_LOCKED
+						: MOTION_PROTECT_IMU);
+			}
 			if (inductance4_calibration_active || !inductance4_calibration_valid)
 			{
 				pwm_state = 0;
@@ -324,13 +335,7 @@ void TM1_Isr() interrupt 3
             update_gyro_angle_accumulator(&gyro_right_angle,gyro_roll_sign_angle);
 		/********************* Encoder integration ********************/
 
-			//Encoder integration
-			if (timer_call_count < 30) {
-			timer_call_count++;
-				l_speed_now=0;
-				r_speed_now=0;
-				mot_inc = 0.0f;
-			} 
+			// Encoder integration
 			update_encoder_speedup_value(&mot_inc_element,encoder_sign);
 			
 		
@@ -362,19 +367,41 @@ void TM1_Isr() interrupt 3
 				L_pid.Target = override_left_target;
 				R_pid.Target = override_right_target;
 			}
-			else if (Turn_PID.err > 0)
-			{
-				L_pid.Target = L_pid.Target_base - dir_enlarge * Turn_PID.out;
-				R_pid.Target = R_pid.Target_base + dir_enlarge * Turn_PID.out - speed_damping;
-			}
 			else
 			{
-				L_pid.Target = L_pid.Target_base - dir_enlarge * Turn_PID.out - speed_damping;
-				R_pid.Target = R_pid.Target_base + dir_enlarge * Turn_PID.out;
+				/* Normal tracking keeps average speed stable and never reverses a wheel. */
+				track_line_speed_scale = motion_runtime_line_speed_scale(
+					inductance4_get_line_sum());
+				track_base_target = L_pid.Target_base - speed_damping;
+				if (track_base_target < 0.0f)
+				{
+					track_base_target = 0.0f;
+				}
+				track_base_target *= track_line_speed_scale;
+
+				if (dir_loop_limit > 0.0f)
+				{
+					track_turn_ratio = dir_enlarge * Turn_PID.out / dir_loop_limit;
+				}
+				else
+				{
+					track_turn_ratio = 0.0f;
+				}
+				track_turn_ratio = limit_function(
+					track_turn_ratio,
+					-g_track_duty_limit,
+					g_track_duty_limit);
+
+				L_pid.Target = track_base_target * (1.0f - track_turn_ratio);
+				R_pid.Target = track_base_target * (1.0f + track_turn_ratio);
 			}
 
-			current_l_pwm_inc = current_l_pwm_inc + IncPID(l_speed_now, L_pid.Target, &L_pid);
-			current_r_pwm_inc = current_r_pwm_inc + IncPID(r_speed_now, R_pid.Target, &R_pid);
+			left_pid_delta = motion_runtime_limit_pid_delta(
+				IncPID(l_speed_now, L_pid.Target, &L_pid));
+			right_pid_delta = motion_runtime_limit_pid_delta(
+				IncPID(r_speed_now, R_pid.Target, &R_pid));
+			current_l_pwm_inc = current_l_pwm_inc + left_pid_delta;
+			current_r_pwm_inc = current_r_pwm_inc + right_pid_delta;
 
 			current_l_pwm_inc = current_l_pwm_inc_last * 0.2f + current_l_pwm_inc * 0.8f;
 			current_r_pwm_inc = current_r_pwm_inc_last * 0.2f + current_r_pwm_inc * 0.8f;
@@ -434,6 +461,15 @@ void TM1_Isr() interrupt 3
 		
         current_l_pwm_duty=limit_function(current_l_pwm_duty,-1000,1000);
 		current_r_pwm_duty=limit_function(current_r_pwm_duty,-1000,1000);
+
+		motion_runtime_check_feedback(
+			L_pid.Target,
+			R_pid.Target,
+			l_speed_now,
+			r_speed_now,
+			current_l_pwm_duty,
+			current_r_pwm_duty,
+			(uint8)(pwm_state == 1U && !line_wait_active));
 
 
 		
