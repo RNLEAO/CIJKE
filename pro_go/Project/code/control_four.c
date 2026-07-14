@@ -58,20 +58,24 @@ void init(void)
 
 		ctimer_count_init(MOTOR1_ENCODER);
 		ctimer_count_init(MOTOR2_ENCODER);
+		gpio_init(IO_P35, GPI, GPIO_LOW, GPI_IMPEDANCE);
+		gpio_init(IO_P53, GPI, GPIO_LOW, GPI_IMPEDANCE);
 		delay_ms(10);
 
-		pwm_init(PWMA_CH2P_P62, 17000, 0);
-		pwm_init(PWMA_CH1P_P60, 17000, 0);
-		pwm_init(PWMA_CH4P_P66, 17000, 0);
-		pwm_init(PWMA_CH3P_P64, 17000, 0);
+		gpio_init(LEFT_MOTOR_DIR_IO, GPO, GPIO_LOW, GPO_PUSH_PULL);
+		gpio_init(RIGHT_MOTOR_DIR_IO, GPO, GPIO_LOW, GPO_PUSH_PULL);
+		pwm_init(LEFT_MOTOR_PWM, 17000, 0);
+		pwm_init(RIGHT_MOTOR_PWM, 17000, 0);
 		delay_ms(10);
 		
+		/* Keep wireless CMD high; low selects configuration mode. */
+		gpio_init(IO_P45, GPI, GPIO_HIGH, GPI_PULL_UP);
 		wireless_uart_init();
+		/* P0.7 is owned by the wireless RTS input. */
 		
 			
 		gpio_mode(P2_6,GPO_PP);
 		gpio_mode(P7_4,GPO_PP);
-		gpio_mode(P0_7,GPO_PP);
 		gpio_mode(P5_2,GPO_PP);
 
         gpio_init(IO_P70, GPI, GPIO_HIGH, GPI_PULL_UP);
@@ -243,7 +247,9 @@ void key_scan_cycle_pwm_state(void)
         {
             key70_long_sent = 1;
             if (pwm_state == 2) pwm_state = 0;
-            else pwm_state = (pwm_state == 1) ? 0 : 1;
+            else if (pwm_state == 1) pwm_state = 0;
+            else if (motion_runtime_can_run()) pwm_state = 1;
+            else pwm_state = 0;
             Pwmout = pwm_state;
             post_ui_key_event(KEY_EVENT_RUN_TOGGLE);
         }

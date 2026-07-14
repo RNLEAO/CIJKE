@@ -7,11 +7,11 @@ extern void reset_motion_pid_state(void);
 #define ELEMENT4_RECOVER_TICKS         25U
 #define ELEMENT4_RIGHT_ANGLE_TIMEOUT  140U
 #define ELEMENT4_RING_TIMEOUT         500U
-#define ELEMENT4_LINE_SUM_MIN          35.0f
 #define ELEMENT4_LINE_ERROR_MAX         0.45f
 
 Element4State element4_state = ELEMENT4_TRACK;
 int8 element4_direction = 0;
+uint8 element4_enabled = 0U;
 
 uint8 cir_flag = 0;
 uint8 encoder_sign = 0;
@@ -72,7 +72,7 @@ static uint8 line_reacquired(float track_error)
 {
     float total = L + LM + RM + R;
 
-    return total >= ELEMENT4_LINE_SUM_MIN
+    return total >= (float)INDUCTANCE4_LINE_LOST_SUM
         && absolute_float(track_error) <= ELEMENT4_LINE_ERROR_MAX;
 }
 
@@ -191,12 +191,36 @@ static void start_ring(int8 direction)
 
 void element4_init(void)
 {
+    element4_enabled = 0U;
     enter_track_state();
+}
+
+void element4_set_enabled(uint8 enabled)
+{
+    element4_enabled = enabled ? 1U : 0U;
+    if (!element4_enabled)
+    {
+        enter_track_state();
+    }
+}
+
+uint8 element4_is_enabled(void)
+{
+    return element4_enabled;
 }
 
 float element4_process(float track_error)
 {
     int8 detected_direction;
+
+    if (!element4_enabled)
+    {
+        if (element4_state != ELEMENT4_TRACK)
+        {
+            enter_track_state();
+        }
+        return track_error;
+    }
 
     state_ticks++;
 
@@ -371,7 +395,7 @@ uint8 element4_get_speed_override(float *left_target, float *right_target)
         return 0;
     }
 
-    if (element4_state != ELEMENT4_RIGHT_ANGLE_TURN)
+    if (!element4_enabled || element4_state != ELEMENT4_RIGHT_ANGLE_TURN)
     {
         return 0;
     }
@@ -392,6 +416,11 @@ uint8 element4_get_speed_override(float *left_target, float *right_target)
 
 const char *element4_state_name(void)
 {
+    if (!element4_enabled)
+    {
+        return "OFF";
+    }
+
     switch (element4_state)
     {
         case ELEMENT4_TRACK: return "TRACK";

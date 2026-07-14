@@ -86,34 +86,14 @@ void DMA_UART3_IRQHandler(void) interrupt 17
 
 void DMA_UART4_IRQHandler(void) interrupt 18
 {
-    uint8 rx_data;
-
     if (DMA_UR4R_STA & 0x01)
     {
         DMA_UR4R_STA &= ~0x01;
-        rx_data = uart_rx_buff[UART_4][0];
         uart_rx_start_buff(UART_4);
-
-        if (RxLine < 200U)
-        {
-            DataBuff[RxLine++] = rx_data;
-        }
-        else
-        {
-            RxLine = 0;
-            memset(DataBuff, 0, sizeof(DataBuff));
-        }
-
-        if (rx_data == 0x21)
-        {
-            USART_PID_Adjust();
-            memset(DataBuff, 0, sizeof(DataBuff));
-            RxLine = 0;
-        }
 
         if (uart4_irq_handler != NULL)
         {
-            uart4_irq_handler(rx_data);
+            uart4_irq_handler(uart_rx_buff[UART_4][0]);
         }
     }
 
@@ -125,6 +105,10 @@ void DMA_UART4_IRQHandler(void) interrupt 18
 }
 
 #define LED P52
+#define DIAGNOSTIC_STREAM_TICKS 1000U
+
+extern volatile uint8 diagnostic_stream_enabled;
+extern volatile uint8 diagnostic_stream_due;
 void INT0_Isr() interrupt 0
 {
 	LED = 0;	// ASCII-cleaned legacy comment.
@@ -172,6 +156,8 @@ float current_l_pwm_duty_turn = 0;
 float current_r_pwm_duty_turn = 0;
 float current_l_pwm_duty = 0;
 float current_r_pwm_duty = 0;
+static vuint8 line_wait_active = 0U;
+static vuint8 speed_direction_guard_mask = 0U;
 
 float mot_inc=0;
 float mot_inc_element=0;
@@ -196,6 +182,8 @@ float dir_loop_limit=450;
 float dir_enlarge=1;
 float speed_damping=0;
 float speed_damping_enlarge=0.38f;
+float track_turn_ratio=0.0f;
+float track_line_speed_scale=0.0f;
 
 float err_H=1.5;
 float err_X=1;
@@ -229,11 +217,10 @@ static void reset_pid_runtime(_PID *pid)
     pid->kd_out = 0.0f;
 }
 
-void reset_motion_pid_state(void)
+static void reset_speed_pid_state(void)
 {
     reset_pid_runtime(&L_pid);
     reset_pid_runtime(&R_pid);
-    reset_pid_runtime(&Turn_PID);
 
     current_l_pwm_inc = 0.0f;
     current_r_pwm_inc = 0.0f;
@@ -243,24 +230,115 @@ void reset_motion_pid_state(void)
     current_r_pwm_duty = 0.0f;
 }
 
+void reset_motion_pid_state(void)
+{
+    reset_speed_pid_state();
+    reset_pid_runtime(&Turn_PID);
+}
+
+static uint8 line_guard_required(void)
+{
+    return element4_state == ELEMENT4_TRACK
+        || element4_state == ELEMENT4_RIGHT_ANGLE_CONFIRM
+        || element4_state == ELEMENT4_RING_CONFIRM;
+}
+
+static float enforce_target_direction(float pwm_value, float target, uint8 guard_bit)
+{
+    if ((target > 0.0f && pwm_value < 0.0f)
+        || (target < 0.0f && pwm_value > 0.0f)
+        || target == 0.0f)
+    {
+        if (pwm_value != 0.0f)
+        {
+            speed_direction_guard_mask |= guard_bit;
+        }
+        return 0.0f;
+    }
+
+    return pwm_value;
+}
+
+unsigned char motion_line_wait_is_active(void)
+{
+    return line_wait_active;
+}
+
+unsigned char motion_direction_guard_mask(void)
+{
+    return speed_direction_guard_mask;
+}
+
 
 
 void TM1_Isr() interrupt 3
 {
-			static int timer_call_count = 0; 
+			static uint16 diagnostic_stream_ticks = 0U;
 			float override_left_target;
 			float override_right_target;
+			float track_base_target;
+			float left_pid_delta;
+			float right_pid_delta;
 
 			TIM1_CLEAR_FLAG;
+			if (diagnostic_stream_enabled)
+			{
+				if (diagnostic_stream_ticks < DIAGNOSTIC_STREAM_TICKS)
+				{
+					diagnostic_stream_ticks++;
+				}
+				if (diagnostic_stream_ticks >= DIAGNOSTIC_STREAM_TICKS)
+				{
+					diagnostic_stream_ticks = 0U;
+					diagnostic_stream_due = 1U;
+				}
+			}
+			else
+			{
+				diagnostic_stream_ticks = 0U;
+				diagnostic_stream_due = 0U;
+			}
 
 //			angle_project(100);
 		
 		/********************* Sensor acquisition and safety ********************/
 			
 			acquire_sensor_data();
+			negative_pressure_tick();
+			if (motion_runtime_encoder_test_is_active())
+			{
+				motion_runtime_encoder_test_tick();
+				return;
+			}
+			if (motion_runtime_motor_test_is_active())
+			{
+				motion_runtime_motor_test_tick();
+				return;
+			}
+			if (pwm_state == 1U && !motion_runtime_can_run())
+			{
+				motion_runtime_trigger_protection(
+					g_imu_runtime_state == IMU_RUNTIME_READY
+						? MOTION_PROTECT_RUN_LOCKED
+						: MOTION_PROTECT_IMU);
+			}
 			if (inductance4_calibration_active || !inductance4_calibration_valid)
 			{
 				pwm_state = 0;
+			}
+
+			if (line_guard_required() && !inductance4_line_is_present())
+			{
+				if (!line_wait_active)
+				{
+					line_wait_active = 1U;
+					reset_motion_pid_state();
+				}
+			}
+			else if (line_wait_active)
+			{
+				line_wait_active = 0U;
+				reset_motion_pid_state();
 			}
 
 		/********************* Gyroscope integration ********************/
@@ -270,13 +348,7 @@ void TM1_Isr() interrupt 3
             update_gyro_angle_accumulator(&gyro_right_angle,gyro_roll_sign_angle);
 		/********************* Encoder integration ********************/
 
-			//Encoder integration
-			if (timer_call_count < 30) {
-			timer_call_count++;
-				l_speed_now=0;
-				r_speed_now=0;
-				mot_inc = 0.0f;
-			} 
+			// Encoder integration
 			update_encoder_speedup_value(&mot_inc_element,encoder_sign);
 			
 		
@@ -291,34 +363,73 @@ void TM1_Isr() interrupt 3
 
 		
 
-		if (element4_get_speed_override(&override_left_target, &override_right_target))
+		speed_direction_guard_mask = 0U;
+		if (line_wait_active)
 		{
-			L_pid.Target = override_left_target;
-			R_pid.Target = override_right_target;
-		}
-		else if (Turn_PID.err > 0)
-		{
-			L_pid.Target = L_pid.Target_base - dir_enlarge * Turn_PID.out;
-			R_pid.Target = R_pid.Target_base + dir_enlarge * Turn_PID.out - speed_damping;
+			L_pid.Target = 0.0f;
+			R_pid.Target = 0.0f;
+			current_l_pwm_inc = 0.0f;
+			current_r_pwm_inc = 0.0f;
+			current_l_pwm_inc_last = 0.0f;
+			current_r_pwm_inc_last = 0.0f;
 		}
 		else
 		{
-			L_pid.Target = L_pid.Target_base - dir_enlarge * Turn_PID.out - speed_damping;
-			R_pid.Target = R_pid.Target_base + dir_enlarge * Turn_PID.out;
+			if (element4_get_speed_override(&override_left_target, &override_right_target))
+			{
+				L_pid.Target = override_left_target;
+				R_pid.Target = override_right_target;
+			}
+			else
+			{
+				/* Normal tracking keeps average speed stable and never reverses a wheel. */
+				track_line_speed_scale = motion_runtime_line_speed_scale(
+					inductance4_get_line_sum());
+				track_base_target = L_pid.Target_base - speed_damping;
+				if (track_base_target < 0.0f)
+				{
+					track_base_target = 0.0f;
+				}
+				track_base_target *= track_line_speed_scale;
+
+				if (dir_loop_limit > 0.0f)
+				{
+					track_turn_ratio = dir_enlarge * Turn_PID.out / dir_loop_limit;
+				}
+				else
+				{
+					track_turn_ratio = 0.0f;
+				}
+				track_turn_ratio = limit_function(
+					track_turn_ratio,
+					-g_track_duty_limit,
+					g_track_duty_limit);
+
+				L_pid.Target = track_base_target * (1.0f - track_turn_ratio);
+				R_pid.Target = track_base_target * (1.0f + track_turn_ratio);
+			}
+
+			left_pid_delta = motion_runtime_limit_pid_delta(
+				IncPID(l_speed_now, L_pid.Target, &L_pid));
+			right_pid_delta = motion_runtime_limit_pid_delta(
+				IncPID(r_speed_now, R_pid.Target, &R_pid));
+			current_l_pwm_inc = current_l_pwm_inc + left_pid_delta;
+			current_r_pwm_inc = current_r_pwm_inc + right_pid_delta;
+
+			current_l_pwm_inc = current_l_pwm_inc_last * 0.2f + current_l_pwm_inc * 0.8f;
+			current_r_pwm_inc = current_r_pwm_inc_last * 0.2f + current_r_pwm_inc * 0.8f;
+
+			current_l_pwm_inc = limit_function(current_l_pwm_inc, -1000, 1000);
+			current_r_pwm_inc = limit_function(current_r_pwm_inc, -1000, 1000);
+
+			current_l_pwm_inc = enforce_target_direction(
+				current_l_pwm_inc, L_pid.Target, 0x01U);
+			current_r_pwm_inc = enforce_target_direction(
+				current_r_pwm_inc, R_pid.Target, 0x02U);
+
+			current_l_pwm_inc_last = current_l_pwm_inc;
+			current_r_pwm_inc_last = current_r_pwm_inc;
 		}
-		
-		
-        current_l_pwm_inc = current_l_pwm_inc + IncPID(l_speed_now, L_pid.Target, &L_pid);
-		current_r_pwm_inc = current_r_pwm_inc + IncPID(r_speed_now, R_pid.Target, &R_pid);
-
-        current_l_pwm_inc = current_l_pwm_inc_last * 0.2f + current_l_pwm_inc * 0.8f;
-		current_r_pwm_inc = current_r_pwm_inc_last * 0.2f + current_r_pwm_inc * 0.8f;
-
-        current_l_pwm_inc_last = current_l_pwm_inc;
-		current_r_pwm_inc_last = current_r_pwm_inc;
-
-        current_l_pwm_inc = limit_function(current_l_pwm_inc, -2000, 2000);
-		current_r_pwm_inc = limit_function(current_r_pwm_inc, -2000, 2000);
 
 
 	 
@@ -355,14 +466,29 @@ void TM1_Isr() interrupt 3
                 current_l_pwm_duty=current_l_pwm_inc;
                 current_r_pwm_duty=current_r_pwm_inc;
 
-                current_l_pwm_inc=limit_function(current_l_pwm_inc,-2000,2000);
-                current_r_pwm_inc=limit_function(current_r_pwm_inc,-2000,2000);
+                current_l_pwm_inc=limit_function(current_l_pwm_inc,-1000,1000);
+                current_r_pwm_inc=limit_function(current_r_pwm_inc,-1000,1000);
             }
         #endif
 		
 		
-        current_l_pwm_duty=limit_function(current_l_pwm_duty,-5000,5000);
-		current_r_pwm_duty=limit_function(current_r_pwm_duty,-5000,5000);
+        current_l_pwm_duty=limit_function(
+            current_l_pwm_duty,
+            -MOTOR_PWM_LIMIT_VALUE,
+            MOTOR_PWM_LIMIT_VALUE);
+		current_r_pwm_duty=limit_function(
+            current_r_pwm_duty,
+            -MOTOR_PWM_LIMIT_VALUE,
+            MOTOR_PWM_LIMIT_VALUE);
+
+		motion_runtime_check_feedback(
+			L_pid.Target,
+			R_pid.Target,
+			l_speed_now,
+			r_speed_now,
+			current_l_pwm_duty,
+			current_r_pwm_duty,
+			(uint8)(pwm_state == 1U && !line_wait_active));
 
 
 		
@@ -404,18 +530,26 @@ float C_CBH=1;
 void TM4_Isr() interrupt 20
 {
 		inductance4_update();
-		error = inductance4_calculate_error();
-		error = element4_process(error);
+		if (line_guard_required() && !inductance4_line_is_present())
+		{
+			error = 0.0f;
+			reset_pid_runtime(&Turn_PID);
+		}
+		else
+		{
+			error = inductance4_calculate_error();
+			error = element4_process(error);
 
-		Turn_PID.err=error;
-		Turn_PID.out=Turn_PID.kp*Turn_PID.err+
+			Turn_PID.err=error;
+			Turn_PID.out=Turn_PID.kp*Turn_PID.err+
 								 Turn_PID.ki*Turn_PID.err*fabs(Turn_PID.err)*2+
 								 Turn_PID.kd*(Turn_PID.err-Turn_PID.err_last)+
 								 Turn_PID.kp1*gyro_data[0];
-		Turn_PID.last=Turn_PID.out;
-		Turn_PID.out=limit_function(Turn_PID.out,-dir_loop_limit,dir_loop_limit);
+			Turn_PID.last=Turn_PID.out;
+			Turn_PID.out=limit_function(Turn_PID.out,-dir_loop_limit,dir_loop_limit);
 
-		Turn_PID.err_last=Turn_PID.err;
+			Turn_PID.err_last=Turn_PID.err;
+		}
 
 
 		TIM4_CLEAR_FLAG;

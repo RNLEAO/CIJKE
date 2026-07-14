@@ -40,6 +40,9 @@ extern float current_r_pwm_inc;
 
 extern float current_l_pwm_inc_last;
 extern float current_r_pwm_inc_last;
+unsigned char motion_line_wait_is_active(void);
+unsigned char motion_direction_guard_mask(void);
+void reset_motion_pid_state(void);
 
 
 extern float mid_dynamic_weight;
@@ -76,6 +79,8 @@ extern float encoder_straight_element;
 extern float dir_loop_limit; //方向环限幅
 extern float dir_enlarge;  		//方向环pid放大系数
 extern float speed_damping; // 速度抑制系数
+extern float track_turn_ratio;
+extern float track_line_speed_scale;
 
 extern float err_H;
 extern float err_X;
@@ -114,5 +119,3 @@ extern float speed[5];
 
 
 #endif
-
-

@@ -8,12 +8,16 @@
 #define MOTOR2_DIR P53
 
 
-// Dual-PWM H-bridge outputs.
-#define MOTOR1 PWMA_CH2P_P62
-#define MOTOR1_d P64
+/* Verified driver wiring: left wheel uses motor 2, right wheel uses motor 1. */
+#define LEFT_MOTOR_PWM             PWMA_CH3P_P64
+#define LEFT_MOTOR_DIR             P66
+#define LEFT_MOTOR_DIR_IO          IO_P66
+#define LEFT_MOTOR_FORWARD_LEVEL   0U
 
-#define MOTOR2 PWMA_CH1P_P60
-#define MOTOR2_d P66
+#define RIGHT_MOTOR_PWM            PWMA_CH1P_P60
+#define RIGHT_MOTOR_DIR            P62
+#define RIGHT_MOTOR_DIR_IO         IO_P62
+#define RIGHT_MOTOR_FORWARD_LEVEL  0U
 
 
 

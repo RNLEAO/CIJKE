@@ -11,6 +11,7 @@
 **/*.uvgui.*
 **/*.uvopt
 **/*.uvopt.bak
+**/logs/*.log
 
 # Local backup snapshots
 **/*.bak
