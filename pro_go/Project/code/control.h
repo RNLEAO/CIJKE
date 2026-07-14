@@ -17,7 +17,7 @@
 #define RIGHT_MOTOR_PWM            PWMA_CH1P_P60
 #define RIGHT_MOTOR_DIR            P62
 #define RIGHT_MOTOR_DIR_IO         IO_P62
-#define RIGHT_MOTOR_FORWARD_LEVEL  1U
+#define RIGHT_MOTOR_FORWARD_LEVEL  0U
 
 
 
