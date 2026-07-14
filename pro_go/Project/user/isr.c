@@ -304,6 +304,7 @@ void TM1_Isr() interrupt 3
 		/********************* Sensor acquisition and safety ********************/
 			
 			acquire_sensor_data();
+			negative_pressure_tick();
 			if (motion_runtime_encoder_test_is_active())
 			{
 				motion_runtime_encoder_test_tick();

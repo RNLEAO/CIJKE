@@ -667,6 +667,16 @@
               <FileType>1</FileType>
               <FilePath>..\code\motion_runtime.c</FilePath>
             </File>
+            <File>
+              <FileName>negative_pressure.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\code\negative_pressure.c</FilePath>
+            </File>
+            <File>
+              <FileName>negative_pressure_menu.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\code\negative_pressure_menu.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -736,6 +746,16 @@
               <FileName>motion_runtime.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\code\motion_runtime.h</FilePath>
+            </File>
+            <File>
+              <FileName>negative_pressure.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\code\negative_pressure.h</FilePath>
+            </File>
+            <File>
+              <FileName>negative_pressure_menu.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\code\negative_pressure_menu.h</FilePath>
             </File>
           </Files>
         </Group>
