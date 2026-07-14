@@ -31,6 +31,12 @@ static void negative_pressure_output_off(void)
     negative_pressure_real_output_percent = 0U;
 }
 
+static uint8 negative_pressure_motion_test_active(void)
+{
+    return (uint8)(motion_runtime_encoder_test_is_active()
+        || motion_runtime_motor_test_is_active());
+}
+
 static void negative_pressure_apply_output(void)
 {
 #if NEGATIVE_PRESSURE_OUTPUT_ENABLE
@@ -38,6 +44,7 @@ static void negative_pressure_apply_output(void)
         && negative_pressure_armed
         && !negative_pressure_fault_latched
         && pwm_state == 0U
+        && !negative_pressure_motion_test_active()
         && (negative_pressure_state == NEGATIVE_PRESSURE_STATE_PREPARE
             || negative_pressure_state == NEGATIVE_PRESSURE_STATE_HOLD))
     {
@@ -105,7 +112,8 @@ void negative_pressure_set_armed(bit armed)
         && !negative_pressure_fault_latched
         && !negative_pressure_lockout
         && !negative_pressure_cooldown_active
-        && pwm_state == 0U)
+        && pwm_state == 0U
+        && !negative_pressure_motion_test_active())
     {
         negative_pressure_armed = 1;
     }
@@ -125,7 +133,8 @@ uint8 negative_pressure_fire(void)
         || negative_pressure_lockout
         || negative_pressure_cooldown_active
         || negative_pressure_state != NEGATIVE_PRESSURE_STATE_OFF
-        || pwm_state != 0U)
+        || pwm_state != 0U
+        || negative_pressure_motion_test_active())
     {
         return 0U;
     }
@@ -141,7 +150,9 @@ uint8 negative_pressure_fire(void)
 
 uint8 negative_pressure_reset(void)
 {
-    if (pwm_state != 0U || negative_pressure_cooldown_active)
+    if (pwm_state != 0U
+        || negative_pressure_cooldown_active
+        || negative_pressure_motion_test_active())
     {
         return 0U;
     }
@@ -166,6 +177,21 @@ void negative_pressure_tick(void)
         {
             negative_pressure_cooldown_active = 0;
         }
+    }
+
+    if (negative_pressure_motion_test_active())
+    {
+        if (negative_pressure_enabled
+            || negative_pressure_armed
+            || negative_pressure_state != NEGATIVE_PRESSURE_STATE_OFF)
+        {
+            negative_pressure_latch_fault();
+        }
+        else
+        {
+            negative_pressure_output_off();
+        }
+        return;
     }
 
     if (pwm_state != 0U)

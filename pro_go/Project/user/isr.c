@@ -86,34 +86,14 @@ void DMA_UART3_IRQHandler(void) interrupt 17
 
 void DMA_UART4_IRQHandler(void) interrupt 18
 {
-    uint8 rx_data;
-
     if (DMA_UR4R_STA & 0x01)
     {
         DMA_UR4R_STA &= ~0x01;
-        rx_data = uart_rx_buff[UART_4][0];
         uart_rx_start_buff(UART_4);
-
-        if (RxLine < 200U)
-        {
-            DataBuff[RxLine++] = rx_data;
-        }
-        else
-        {
-            RxLine = 0;
-            memset(DataBuff, 0, sizeof(DataBuff));
-        }
-
-        if (rx_data == 0x21)
-        {
-            USART_PID_Adjust();
-            memset(DataBuff, 0, sizeof(DataBuff));
-            RxLine = 0;
-        }
 
         if (uart4_irq_handler != NULL)
         {
-            uart4_irq_handler(rx_data);
+            uart4_irq_handler(uart_rx_buff[UART_4][0]);
         }
     }
 
@@ -125,6 +105,10 @@ void DMA_UART4_IRQHandler(void) interrupt 18
 }
 
 #define LED P52
+#define DIAGNOSTIC_STREAM_TICKS 1000U
+
+extern volatile uint8 diagnostic_stream_enabled;
+extern volatile uint8 diagnostic_stream_due;
 void INT0_Isr() interrupt 0
 {
 	LED = 0;	// ASCII-cleaned legacy comment.
@@ -289,6 +273,7 @@ unsigned char motion_direction_guard_mask(void)
 
 void TM1_Isr() interrupt 3
 {
+			static uint16 diagnostic_stream_ticks = 0U;
 			float override_left_target;
 			float override_right_target;
 			float track_base_target;
@@ -296,12 +281,40 @@ void TM1_Isr() interrupt 3
 			float right_pid_delta;
 
 			TIM1_CLEAR_FLAG;
+			if (diagnostic_stream_enabled)
+			{
+				if (diagnostic_stream_ticks < DIAGNOSTIC_STREAM_TICKS)
+				{
+					diagnostic_stream_ticks++;
+				}
+				if (diagnostic_stream_ticks >= DIAGNOSTIC_STREAM_TICKS)
+				{
+					diagnostic_stream_ticks = 0U;
+					diagnostic_stream_due = 1U;
+				}
+			}
+			else
+			{
+				diagnostic_stream_ticks = 0U;
+				diagnostic_stream_due = 0U;
+			}
 
 //			angle_project(100);
 		
 		/********************* Sensor acquisition and safety ********************/
 			
 			acquire_sensor_data();
+			negative_pressure_tick();
+			if (motion_runtime_encoder_test_is_active())
+			{
+				motion_runtime_encoder_test_tick();
+				return;
+			}
+			if (motion_runtime_motor_test_is_active())
+			{
+				motion_runtime_motor_test_tick();
+				return;
+			}
 			if (pwm_state == 1U && !motion_runtime_can_run())
 			{
 				motion_runtime_trigger_protection(
@@ -459,8 +472,14 @@ void TM1_Isr() interrupt 3
         #endif
 		
 		
-        current_l_pwm_duty=limit_function(current_l_pwm_duty,-1000,1000);
-		current_r_pwm_duty=limit_function(current_r_pwm_duty,-1000,1000);
+        current_l_pwm_duty=limit_function(
+            current_l_pwm_duty,
+            -MOTOR_PWM_LIMIT_VALUE,
+            MOTOR_PWM_LIMIT_VALUE);
+		current_r_pwm_duty=limit_function(
+            current_r_pwm_duty,
+            -MOTOR_PWM_LIMIT_VALUE,
+            MOTOR_PWM_LIMIT_VALUE);
 
 		motion_runtime_check_feedback(
 			L_pid.Target,
@@ -477,7 +496,6 @@ void TM1_Isr() interrupt 3
 
 				//protect
 		key_scan_cycle_pwm_state();
-		negative_pressure_tick();
 
 		if(pwm_state==2){
 		mot_inc=0;

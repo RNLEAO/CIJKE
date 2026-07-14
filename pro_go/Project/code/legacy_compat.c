@@ -49,10 +49,11 @@ void ctimer_count_init(CTIMN_enum timer)
     switch (timer)
     {
         case CTIM0_P34:
-            gpio_init(IO_P34, GPI, GPIO_LOW, GPI_IMPEDANCE);
+            gpio_init(IO_P34, GPI, GPIO_HIGH, GPI_PULL_UP);
+            TR0 = 0;
             TL0 = 0;
             TH0 = 0;
-            TMOD |= 0x04;
+            TMOD = (TMOD & 0xF0) | 0x04;
             TR0 = 1;
             break;
 
@@ -72,10 +73,11 @@ void ctimer_count_init(CTIMN_enum timer)
             break;
 
         case CTIM3_P04:
-            gpio_init(IO_P04, GPI, GPIO_LOW, GPI_IMPEDANCE);
+            gpio_init(IO_P04, GPI, GPIO_HIGH, GPI_PULL_UP);
+            T4T3M &= ~(1 << 3);
             T3L = 0;
             T3H = 0;
-            T4T3M |= 0x0C;
+            T4T3M = (T4T3M & 0xF0) | 0x0C;
             break;
 
         case CTIM4_P06:
@@ -111,6 +113,25 @@ uint16 ctimer_count_read(CTIMN_enum timer)
     }
 
     return count;
+}
+
+uint8 ctimer_count_mode_active(CTIMN_enum timer)
+{
+    switch (timer)
+    {
+        case CTIM0_P34:
+            return T0_CT ? 1U : 0U;
+        case CTIM1_P35:
+            return T1_CT ? 1U : 0U;
+        case CTIM2_P12:
+            return (AUXR & (1 << 3)) ? 1U : 0U;
+        case CTIM3_P04:
+            return T3_CT ? 1U : 0U;
+        case CTIM4_P06:
+            return T4_CT ? 1U : 0U;
+        default:
+            return 0U;
+    }
 }
 
 void ctimer_count_clean(CTIMN_enum timer)
