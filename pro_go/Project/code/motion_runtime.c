@@ -4,7 +4,7 @@
 #define IMU_CALIBRATION_MAX_SPAN_DPS       12.0f
 #define IMU_CALIBRATION_MAX_BIAS_DPS       30.0f
 
-#define MOTOR_PWM_LIMIT                  1000.0f
+#define MOTOR_PWM_LIMIT           MOTOR_PWM_LIMIT_VALUE
 #define MOTOR_REVERSE_DEADTIME_TICKS       10U
 #define MOTOR_STALL_PWM_MIN               350.0f
 #define MOTOR_STALL_TARGET_MIN             20.0f
@@ -13,7 +13,7 @@
 #define MOTOR_DIRECTION_SPEED_MIN           5.0f
 #define MOTOR_DIRECTION_TARGET_MIN         20.0f
 #define MOTOR_DIRECTION_FAULT_TICKS        20U
-#define MOTOR_SATURATION_THRESHOLD        995.0f
+#define MOTOR_SATURATION_THRESHOLD (MOTOR_PWM_LIMIT_VALUE - 5.0f)
 #define MOTOR_SATURATION_FAULT_TICKS      100U
 #define ENCODER_RAW_SPIKE_LIMIT         10000U
 #define ENCODER_SPIKE_FAULT_TICKS           3U
@@ -21,8 +21,8 @@
 #define MOTOR_TEST_CONTROL_PERIOD_MS           5U
 #define MOTOR_TEST_PWM                    ((float)MOTOR_TEST_PWM_VALUE)
 #define MOTOR_TEST_DURATION_TICKS         (MOTOR_TEST_DURATION_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
-#define MOTOR_TEST_PRECHECK_TICKS             10U
-#define MOTOR_TEST_STARTUP_GRACE_TICKS       20U
+#define MOTOR_TEST_PRECHECK_TICKS     (MOTOR_TEST_PRECHECK_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
+#define MOTOR_TEST_STARTUP_GRACE_TICKS      100U
 #define MOTOR_TEST_STALL_TICKS               20U
 #define MOTOR_TEST_DIRECTION_FAULT_TICKS      3U
 #define MOTOR_TEST_NOISE_FAULT_TICKS          3U
@@ -586,7 +586,9 @@ static void motion_apply_left_output(float request)
         desired_abs,
         g_motor_pwm_slew_per_tick);
 
-    LEFT_MOTOR_DIR = left_output_state.applied_sign > 0 ? 1 : 0;
+    LEFT_MOTOR_DIR = left_output_state.applied_sign > 0
+        ? LEFT_MOTOR_FORWARD_LEVEL
+        : (1U - LEFT_MOTOR_FORWARD_LEVEL);
     pwm_set_duty(LEFT_MOTOR_PWM, (uint32)left_output_state.applied_abs_pwm);
     g_motor_left_applied_pwm = left_output_state.applied_sign > 0
         ? left_output_state.applied_abs_pwm
@@ -645,7 +647,9 @@ static void motion_apply_right_output(float request)
         desired_abs,
         g_motor_pwm_slew_per_tick);
 
-    RIGHT_MOTOR_DIR = right_output_state.applied_sign > 0 ? 1 : 0;
+    RIGHT_MOTOR_DIR = right_output_state.applied_sign > 0
+        ? RIGHT_MOTOR_FORWARD_LEVEL
+        : (1U - RIGHT_MOTOR_FORWARD_LEVEL);
     pwm_set_duty(RIGHT_MOTOR_PWM, (uint32)right_output_state.applied_abs_pwm);
     g_motor_right_applied_pwm = right_output_state.applied_sign > 0
         ? right_output_state.applied_abs_pwm

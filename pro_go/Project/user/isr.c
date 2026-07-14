@@ -471,8 +471,14 @@ void TM1_Isr() interrupt 3
         #endif
 		
 		
-        current_l_pwm_duty=limit_function(current_l_pwm_duty,-1000,1000);
-		current_r_pwm_duty=limit_function(current_r_pwm_duty,-1000,1000);
+        current_l_pwm_duty=limit_function(
+            current_l_pwm_duty,
+            -MOTOR_PWM_LIMIT_VALUE,
+            MOTOR_PWM_LIMIT_VALUE);
+		current_r_pwm_duty=limit_function(
+            current_r_pwm_duty,
+            -MOTOR_PWM_LIMIT_VALUE,
+            MOTOR_PWM_LIMIT_VALUE);
 
 		motion_runtime_check_feedback(
 			L_pid.Target,

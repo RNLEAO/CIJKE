@@ -19,6 +19,7 @@ extern int zhijiao_flag;
 #define DIAGNOSTIC_TX_BUFFER_SIZE 900U
 #define GUIDE_STEP_COUNT          10U
 #define GUIDE_COMMAND_SIZE        32U
+#define GUIDE_REPLY_SIZE         128U
 #define GUIDE_CAPTURE_SAMPLES     40U
 #define GUIDE_COMMAND_IDLE_POLLS   3U
 
@@ -31,6 +32,7 @@ typedef enum
 } GuideState;
 
 static int8 xdata diagnostic_tx_buffer[DIAGNOSTIC_TX_BUFFER_SIZE];
+static int8 xdata guide_reply_buffer[GUIDE_REPLY_SIZE];
 static uint8 xdata guide_command_buffer[GUIDE_COMMAND_SIZE];
 static uint8 xdata guide_receive_buffer[GUIDE_COMMAND_SIZE];
 static uint16 xdata guide_old_min[INDUCTANCE4_CHANNEL_COUNT];
@@ -58,6 +60,8 @@ volatile uint8 diagnostic_stream_due = 0U;
 
 static void guide_finish_capture(void);
 static void guide_send_reply(const char *reply);
+static void guide_send_motor_test_started(MotorTestSide side);
+static void guide_send_runtime_config(void);
 static uint8 send_compact_status_frame(void);
 static uint8 send_diagnostic_frame(void);
 static uint8 send_motor_test_result_frame(MotorTestResult result);
@@ -211,6 +215,36 @@ static uint8 guide_command_equals(const int8 *expected)
 static void guide_send_reply(const char *reply)
 {
     wireless_uart_send_string(reply);
+}
+
+static void guide_send_motor_test_started(MotorTestSide side)
+{
+    const int8 *side_text = side == MOTOR_TEST_SIDE_LEFT
+        ? (const int8 *)"L"
+        : (const int8 *)"R";
+
+    (void)zf_sprintf(
+        guide_reply_buffer,
+        (const int8 *)"OK: MTEST %s START PWM=%u PRECHECK=%uMS RUN=%uMS AUTO_STOP\r\n",
+        side_text,
+        (uint32)MOTOR_TEST_PWM_VALUE,
+        (uint32)MOTOR_TEST_PRECHECK_MS,
+        (uint32)MOTOR_TEST_DURATION_MS);
+    guide_send_reply((const char *)guide_reply_buffer);
+}
+
+static void guide_send_runtime_config(void)
+{
+    (void)zf_sprintf(
+        guide_reply_buffer,
+        (const int8 *)"CFG: PWM_LIMIT=%u MTEST_PWM=%u MTEST_MS=%u PRECHECK_MS=%u LDIR=%u RDIR=%u\r\n",
+        (uint32)MOTOR_PWM_LIMIT_VALUE,
+        (uint32)MOTOR_TEST_PWM_VALUE,
+        (uint32)MOTOR_TEST_DURATION_MS,
+        (uint32)MOTOR_TEST_PRECHECK_MS,
+        (uint32)LEFT_MOTOR_FORWARD_LEVEL,
+        (uint32)RIGHT_MOTOR_FORWARD_LEVEL);
+    guide_send_reply((const char *)guide_reply_buffer);
 }
 
 static void guide_rearm_wireless_receiver(void)
@@ -453,9 +487,7 @@ static void guide_process_command(void)
 			if (motion_runtime_motor_test_start(side))
 			{
 				interrupt_global_enable();
-				guide_send_reply(side == MOTOR_TEST_SIDE_LEFT
-					? "OK: MTEST L START PWM=300 PRECHECK=50MS RUN=500MS AUTO_STOP\r\n"
-					: "OK: MTEST R START PWM=300 PRECHECK=50MS RUN=500MS AUTO_STOP\r\n");
+				guide_send_motor_test_started(side);
 			}
 			else
 			{
@@ -764,6 +796,10 @@ static uint8 send_compact_status_frame(void)
                            (const int8 *)motion_runtime_motor_test_side_text());
     diagnostic_append_text((const int8 *)" RESULT=",
                            (const int8 *)motion_runtime_motor_test_result_text());
+    diagnostic_append_u32((const int8 *)" PWM=",
+                          (uint32)MOTOR_TEST_PWM_VALUE);
+    diagnostic_append_u32((const int8 *)" RUN_MS=",
+                          (uint32)MOTOR_TEST_DURATION_MS);
     diagnostic_append_u32((const int8 *)" PULSES=",
                           motion_runtime_motor_test_pulse_total());
     diagnostic_append_u32((const int8 *)" PEAK=",
@@ -816,8 +852,12 @@ static uint8 send_motor_test_result_frame(MotorTestResult result)
     diagnostic_send_offset = 0U;
     diagnostic_append_text((const int8 *)"MTEST RESULT: SIDE=",
                            (const int8 *)motion_runtime_motor_test_side_text());
-    diagnostic_append_text((const int8 *)" DIR=FORWARD RESULT=",
+    diagnostic_append_text((const int8 *)" CMD=FORWARD RESULT=",
                            motor_test_result_text(result));
+    diagnostic_append_u32((const int8 *)" PWM=",
+                          (uint32)MOTOR_TEST_PWM_VALUE);
+    diagnostic_append_u32((const int8 *)" RUN_MS=",
+                          (uint32)MOTOR_TEST_DURATION_MS);
     diagnostic_append_u32((const int8 *)" PULSES=",
                           motion_runtime_motor_test_pulse_total());
     diagnostic_append_u32((const int8 *)" PEAK=",
@@ -1247,6 +1287,7 @@ void main()
 			wireless_uart_send_string(
 				"BOOT: IMU660RB=ERROR MOTOR=LOCKED ELEMENTS=OFF\r\n");
 		}
+		guide_send_runtime_config();
 
 		/* Start control interrupts only after every module is ready. */
 		pit_timer_ms(TIM_1, 5);

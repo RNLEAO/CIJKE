@@ -62,8 +62,8 @@ void init(void)
 		gpio_init(IO_P53, GPI, GPIO_LOW, GPI_IMPEDANCE);
 		delay_ms(10);
 
-		gpio_init(IO_P64, GPO, GPIO_LOW, GPO_PUSH_PULL);
-		gpio_init(IO_P60, GPO, GPIO_LOW, GPO_PUSH_PULL);
+		gpio_init(LEFT_MOTOR_DIR_IO, GPO, GPIO_LOW, GPO_PUSH_PULL);
+		gpio_init(RIGHT_MOTOR_DIR_IO, GPO, GPIO_LOW, GPO_PUSH_PULL);
 		pwm_init(LEFT_MOTOR_PWM, 17000, 0);
 		pwm_init(RIGHT_MOTOR_PWM, 17000, 0);
 		delay_ms(10);

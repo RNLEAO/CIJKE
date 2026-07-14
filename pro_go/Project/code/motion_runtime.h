@@ -3,8 +3,10 @@
 
 #include "zf_common_typedef.h"
 
-#define MOTOR_TEST_PWM_VALUE    300U
-#define MOTOR_TEST_DURATION_MS  500U
+#define MOTOR_PWM_LIMIT_VALUE   2000.0f
+#define MOTOR_TEST_PWM_VALUE    2000U
+#define MOTOR_TEST_DURATION_MS  1000U
+#define MOTOR_TEST_PRECHECK_MS  50U
 #define ENCODER_TEST_DURATION_MS 15000U
 
 typedef enum
