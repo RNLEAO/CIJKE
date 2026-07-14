@@ -68,12 +68,14 @@ void init(void)
 		pwm_init(RIGHT_MOTOR_PWM, 17000, 0);
 		delay_ms(10);
 		
+		/* Keep wireless CMD high; low selects configuration mode. */
+		gpio_init(IO_P45, GPI, GPIO_HIGH, GPI_PULL_UP);
 		wireless_uart_init();
+		/* P0.7 is owned by the wireless RTS input. */
 		
 			
 		gpio_mode(P2_6,GPO_PP);
 		gpio_mode(P7_4,GPO_PP);
-		gpio_mode(P0_7,GPO_PP);
 		gpio_mode(P5_2,GPO_PP);
 
         gpio_init(IO_P70, GPI, GPIO_HIGH, GPI_PULL_UP);

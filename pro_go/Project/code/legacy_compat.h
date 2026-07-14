@@ -63,6 +63,7 @@ void gpio_mode(PIN_enum pin, GPIOMODE_enum mode);
 void ctimer_count_init(CTIMN_enum timer);
 void ctimer_count_clean(CTIMN_enum timer);
 uint16 ctimer_count_read(CTIMN_enum timer);
+uint8 ctimer_count_mode_active(CTIMN_enum timer);
 void pit_timer_ms(TIMN_enum timer, uint16 period_ms);
 
 void iap_read_bytes(uint32 address, uint8 *buffer, uint16 length);
