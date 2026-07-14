@@ -219,31 +219,45 @@ static void guide_send_reply(const char *reply)
 
 static void guide_send_motor_test_started(MotorTestSide side)
 {
+    uint32 reply_length;
     const int8 *side_text = side == MOTOR_TEST_SIDE_LEFT
         ? (const int8 *)"L"
-        : (const int8 *)"R";
+        : (side == MOTOR_TEST_SIDE_RIGHT
+            ? (const int8 *)"R"
+            : (const int8 *)"B");
 
-    (void)zf_sprintf(
+    reply_length = zf_sprintf(
         guide_reply_buffer,
         (const int8 *)"OK: MTEST %s START PWM=%u PRECHECK=%uMS RUN=%uMS AUTO_STOP\r\n",
         side_text,
-        (uint32)MOTOR_TEST_PWM_VALUE,
+        (uint32)motion_runtime_motor_test_pwm_value(),
         (uint32)MOTOR_TEST_PRECHECK_MS,
         (uint32)MOTOR_TEST_DURATION_MS);
+    if (reply_length >= GUIDE_REPLY_SIZE)
+    {
+        reply_length = GUIDE_REPLY_SIZE - 1U;
+    }
+    guide_reply_buffer[reply_length] = '\0';
     guide_send_reply((const char *)guide_reply_buffer);
 }
 
 static void guide_send_runtime_config(void)
 {
-    (void)zf_sprintf(
+    uint32 reply_length = zf_sprintf(
         guide_reply_buffer,
-        (const int8 *)"CFG: PWM_LIMIT=%u MTEST_PWM=%u MTEST_MS=%u PRECHECK_MS=%u LDIR=%u RDIR=%u\r\n",
+        (const int8 *)"CFG: PWM_LIMIT=%u MTEST_PWM=%u MTEST_B_PWM=%u MTEST_MS=%u PRECHECK_MS=%u LDIR=%u RDIR=%u\r\n",
         (uint32)MOTOR_PWM_LIMIT_VALUE,
         (uint32)MOTOR_TEST_PWM_VALUE,
+        (uint32)MOTOR_TEST_BOTH_PWM_VALUE,
         (uint32)MOTOR_TEST_DURATION_MS,
         (uint32)MOTOR_TEST_PRECHECK_MS,
         (uint32)LEFT_MOTOR_FORWARD_LEVEL,
         (uint32)RIGHT_MOTOR_FORWARD_LEVEL);
+    if (reply_length >= GUIDE_REPLY_SIZE)
+    {
+        reply_length = GUIDE_REPLY_SIZE - 1U;
+    }
+    guide_reply_buffer[reply_length] = '\0';
     guide_send_reply((const char *)guide_reply_buffer);
 }
 
@@ -454,11 +468,14 @@ static void guide_process_command(void)
 		}
     }
     else if (guide_command_equals((const int8 *)"MTEST L")
-             || guide_command_equals((const int8 *)"MTEST R"))
+             || guide_command_equals((const int8 *)"MTEST R")
+             || guide_command_equals((const int8 *)"MTEST B"))
     {
 		MotorTestSide side = guide_command_equals((const int8 *)"MTEST L")
 			? MOTOR_TEST_SIDE_LEFT
-			: MOTOR_TEST_SIDE_RIGHT;
+			: (guide_command_equals((const int8 *)"MTEST R")
+				? MOTOR_TEST_SIDE_RIGHT
+				: MOTOR_TEST_SIDE_BOTH);
 
 		motion_runtime_encoder_test_stop();
 		motion_runtime_motor_test_stop();
@@ -616,7 +633,7 @@ static void guide_process_command(void)
     }
     else
     {
-        guide_send_reply("ERROR: USE STATUS / STATUS FULL / STREAM ON / STREAM OFF / STOP / CLEAR / RUN / MTEST L / MTEST R / MTEST STOP / ETEST L / ETEST R / ETEST STOP / IMU CAL / ELEMENTS OFF / CAL START / NEXT / SAVE / CANCEL\r\n");
+        guide_send_reply("ERROR: USE STATUS / STATUS FULL / STREAM ON / STREAM OFF / STOP / CLEAR / RUN / MTEST L / MTEST R / MTEST B / MTEST STOP / ETEST L / ETEST R / ETEST STOP / IMU CAL / ELEMENTS OFF / CAL START / NEXT / SAVE / CANCEL\r\n");
     }
 
     guide_command_length = 0U;
@@ -797,7 +814,7 @@ static uint8 send_compact_status_frame(void)
     diagnostic_append_text((const int8 *)" RESULT=",
                            (const int8 *)motion_runtime_motor_test_result_text());
     diagnostic_append_u32((const int8 *)" PWM=",
-                          (uint32)MOTOR_TEST_PWM_VALUE);
+                          (uint32)motion_runtime_motor_test_pwm_value());
     diagnostic_append_u32((const int8 *)" RUN_MS=",
                           (uint32)MOTOR_TEST_DURATION_MS);
     diagnostic_append_u32((const int8 *)" PULSES=",
@@ -855,7 +872,7 @@ static uint8 send_motor_test_result_frame(MotorTestResult result)
     diagnostic_append_text((const int8 *)" CMD=FORWARD RESULT=",
                            motor_test_result_text(result));
     diagnostic_append_u32((const int8 *)" PWM=",
-                          (uint32)MOTOR_TEST_PWM_VALUE);
+                          (uint32)motion_runtime_motor_test_pwm_value());
     diagnostic_append_u32((const int8 *)" RUN_MS=",
                           (uint32)MOTOR_TEST_DURATION_MS);
     diagnostic_append_u32((const int8 *)" PULSES=",
@@ -873,6 +890,15 @@ static uint8 send_motor_test_result_frame(MotorTestResult result)
     diagnostic_append_u32((const int8 *)" RPEAK=",
                           (uint32)motion_runtime_motor_test_right_peak());
     diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+    if (g_motor_test_side == MOTOR_TEST_SIDE_BOTH)
+    {
+        diagnostic_append_u32((const int8 *)"MTEST BAL: DIFF=",
+                              motion_runtime_motor_test_difference());
+        diagnostic_append_u32((const int8 *)" MATCH_X1000=",
+                              (uint32)motion_runtime_motor_test_balance_x1000());
+        diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+    }
 
     diagnostic_append_u32((const int8 *)"MTEST PRECHECK: LPEAK=",
                           (uint32)motion_runtime_motor_test_left_idle_peak());
@@ -992,7 +1018,7 @@ static uint8 send_diagnostic_frame(void)
                           (uint32)motion_runtime_motor_test_remaining_ms());
     diagnostic_append_u32(
         (const int8 *)" PWM=",
-        (uint32)MOTOR_TEST_PWM_VALUE);
+        (uint32)motion_runtime_motor_test_pwm_value());
     diagnostic_append_u32(
         (const int8 *)" PULSES=",
         motion_runtime_motor_test_pulse_total());

@@ -5,6 +5,7 @@
 
 #define MOTOR_PWM_LIMIT_VALUE   2000.0f
 #define MOTOR_TEST_PWM_VALUE    2000U
+#define MOTOR_TEST_BOTH_PWM_VALUE 2000U
 #define MOTOR_TEST_DURATION_MS  1000U
 #define MOTOR_TEST_PRECHECK_MS  50U
 #define ENCODER_TEST_DURATION_MS 15000U
@@ -36,7 +37,8 @@ typedef enum
 {
     MOTOR_TEST_SIDE_NONE = 0,
     MOTOR_TEST_SIDE_LEFT,
-    MOTOR_TEST_SIDE_RIGHT
+    MOTOR_TEST_SIDE_RIGHT,
+    MOTOR_TEST_SIDE_BOTH
 } MotorTestSide;
 
 typedef enum
@@ -136,10 +138,13 @@ uint8 motion_runtime_motor_test_stop(void);
 void motion_runtime_motor_test_tick(void);
 uint8 motion_runtime_motor_test_is_active(void);
 uint16 motion_runtime_motor_test_remaining_ms(void);
+uint16 motion_runtime_motor_test_pwm_value(void);
 uint32 motion_runtime_motor_test_pulse_total(void);
 uint16 motion_runtime_motor_test_peak_raw(void);
 uint32 motion_runtime_motor_test_left_total(void);
 uint32 motion_runtime_motor_test_right_total(void);
+uint32 motion_runtime_motor_test_difference(void);
+uint16 motion_runtime_motor_test_balance_x1000(void);
 uint16 motion_runtime_motor_test_left_peak(void);
 uint16 motion_runtime_motor_test_right_peak(void);
 uint16 motion_runtime_motor_test_left_idle_peak(void);
