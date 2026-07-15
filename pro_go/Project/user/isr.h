@@ -43,6 +43,7 @@ extern float current_r_pwm_inc_last;
 unsigned char motion_line_wait_is_active(void);
 unsigned char motion_direction_guard_mask(void);
 void reset_motion_pid_state(void);
+void reset_track_test_steering_state(void);
 
 
 extern float mid_dynamic_weight;

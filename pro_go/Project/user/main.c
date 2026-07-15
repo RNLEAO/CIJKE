@@ -16,12 +16,16 @@ uint8 display_mode=0;
 
 extern int zhijiao_flag;
 
-#define DIAGNOSTIC_TX_BUFFER_SIZE 900U
+#define DIAGNOSTIC_TX_BUFFER_SIZE 384U
 #define GUIDE_STEP_COUNT          10U
 #define GUIDE_COMMAND_SIZE        32U
 #define GUIDE_REPLY_SIZE         128U
 #define GUIDE_CAPTURE_SAMPLES     40U
 #define GUIDE_COMMAND_IDLE_POLLS   3U
+#define SCOPE_CHANNEL_COUNT        8U
+#define SCOPE_PACKET_SIZE         40U
+#define SCOPE_ARM_TICKS          400U
+#define SCOPE_TEST_TICKS         400U
 
 typedef enum
 {
@@ -31,8 +35,43 @@ typedef enum
     GUIDE_REVIEW_FAIL
 } GuideState;
 
+typedef enum
+{
+    SCOPE_OFF = 0,
+    SCOPE_ARMED,
+    SCOPE_ACTIVE,
+    SCOPE_TEST_ARMED,
+    SCOPE_TEST_ACTIVE,
+    SCOPE_RESULT_HELD
+} ScopeState;
+
+typedef struct
+{
+    TrackTestResult result;
+    uint16 sample_count;
+    int32 left_average_x10;
+    int32 right_average_x10;
+    int32 left_final_x10;
+    int32 right_final_x10;
+    uint16 match_x1000;
+    uint16 start_sample_count;
+    uint32 start_left_total;
+    uint32 start_right_total;
+    uint16 left_pwm_final;
+    uint16 right_pwm_final;
+    uint16 left_saturation_count;
+    uint16 right_saturation_count;
+    uint16 left_reversal_count;
+    uint16 right_reversal_count;
+    const int8 *result_text;
+    const int8 *protect_text;
+} TrackResultSnapshot;
+
 static int8 xdata diagnostic_tx_buffer[DIAGNOSTIC_TX_BUFFER_SIZE];
 static int8 xdata guide_reply_buffer[GUIDE_REPLY_SIZE];
+static uint8 xdata scope_packet[SCOPE_PACKET_SIZE];
+static float xdata scope_tx_values[SCOPE_CHANNEL_COUNT];
+static TrackResultSnapshot xdata track_result_snapshot;
 static uint8 xdata guide_command_buffer[GUIDE_COMMAND_SIZE];
 static uint8 xdata guide_receive_buffer[GUIDE_COMMAND_SIZE];
 static uint16 xdata guide_old_min[INDUCTANCE4_CHANNEL_COUNT];
@@ -51,21 +90,32 @@ static uint8 xdata guide_window_active;
 static uint8 xdata guide_capture_remaining;
 static uint8 xdata guide_status_pending;
 static uint8 xdata diagnostic_compact_pending;
-static uint8 xdata diagnostic_full_pending;
 static MotorTestResult xdata motor_test_report_pending;
 static EncoderTestResult xdata encoder_test_report_pending;
+static TrackTestResult xdata track_test_report_pending;
+static ScopeState scope_state = SCOPE_OFF;
+static uint8 track_result_valid = 0U;
 
-volatile uint8 diagnostic_stream_enabled = 0U;
-volatile uint8 diagnostic_stream_due = 0U;
+extern volatile uint8 g_scope_arm_active;
+extern volatile uint16 g_scope_arm_ticks;
+extern volatile uint8 g_scope_capture_enabled;
+extern volatile uint8 g_scope_test_mode;
+extern volatile uint8 g_scope_snapshot_ready;
+extern volatile float xdata g_scope_snapshot[SCOPE_CHANNEL_COUNT];
 
 static void guide_finish_capture(void);
 static void guide_send_reply(const char *reply);
+static void guide_send_ttest_error(const int8 *reason);
 static void guide_send_motor_test_started(MotorTestSide side);
+static void guide_send_track_test_started(void);
 static void guide_send_runtime_config(void);
+static const int8 *guide_track_test_precheck(void);
+static void scope_service_arm(void);
+static uint8 send_scope_frame(void);
 static uint8 send_compact_status_frame(void);
-static uint8 send_diagnostic_frame(void);
 static uint8 send_motor_test_result_frame(MotorTestResult result);
 static uint8 send_encoder_test_result_frame(EncoderTestResult result);
+static uint8 send_track_test_result_frame(TrackTestResult result);
 
 static const int8 *motor_test_result_text(MotorTestResult result)
 {
@@ -103,6 +153,49 @@ static void encoder_test_report_event(void)
     if (event != ENCODER_TEST_RESULT_IDLE)
     {
         encoder_test_report_pending = event;
+    }
+}
+
+static void track_test_report_event(void)
+{
+    TrackTestResult event = motion_runtime_track_test_take_event();
+
+    if (event != TRACK_TEST_RESULT_IDLE)
+    {
+        track_result_snapshot.result = event;
+        track_result_snapshot.sample_count = motion_runtime_track_test_sample_count();
+        track_result_snapshot.left_average_x10 = motion_runtime_track_test_left_average_x10();
+        track_result_snapshot.right_average_x10 = motion_runtime_track_test_right_average_x10();
+        track_result_snapshot.left_final_x10 = motion_runtime_track_test_left_final_x10();
+        track_result_snapshot.right_final_x10 = motion_runtime_track_test_right_final_x10();
+        track_result_snapshot.match_x1000 = motion_runtime_track_test_match_x1000();
+        track_result_snapshot.start_sample_count = g_track_test_start_sample_count;
+        track_result_snapshot.start_left_total = g_track_test_start_left_total;
+        track_result_snapshot.start_right_total = g_track_test_start_right_total;
+        track_result_snapshot.left_pwm_final = motion_runtime_track_test_left_pwm_final();
+        track_result_snapshot.right_pwm_final = motion_runtime_track_test_right_pwm_final();
+        track_result_snapshot.left_saturation_count = g_motor_left_saturation_count;
+        track_result_snapshot.right_saturation_count = g_motor_right_saturation_count;
+        track_result_snapshot.left_reversal_count = g_motor_left_reversal_count;
+        track_result_snapshot.right_reversal_count = g_motor_right_reversal_count;
+        track_result_snapshot.result_text =
+            (const int8 *)motion_runtime_track_test_result_text();
+        track_result_snapshot.protect_text =
+            (const int8 *)motion_runtime_protect_reason_text();
+        track_result_valid = 1U;
+
+        if (scope_state == SCOPE_ACTIVE)
+        {
+            interrupt_global_disable();
+            g_scope_capture_enabled = 0U;
+            g_scope_snapshot_ready = 0U;
+            interrupt_global_enable();
+            scope_state = SCOPE_RESULT_HELD;
+        }
+        else
+        {
+            track_test_report_pending = event;
+        }
     }
 }
 
@@ -148,54 +241,6 @@ static void guide_update_window(void)
     }
 }
 
-static const int8 *guide_sensor_name(uint8 channel)
-{
-    switch (channel)
-    {
-        case INDUCTANCE4_L:  return (const int8 *)"L";
-        case INDUCTANCE4_LM: return (const int8 *)"LM";
-        case INDUCTANCE4_RM: return (const int8 *)"RM";
-        case INDUCTANCE4_R:  return (const int8 *)"R";
-        default:             return (const int8 *)"UNKNOWN";
-    }
-}
-
-static const int8 *guide_task_text(void)
-{
-    switch (guide_step)
-    {
-        case 0U: return (const int8 *)"L_OVER_WIRE";
-        case 1U: return (const int8 *)"LM_OVER_WIRE";
-        case 2U: return (const int8 *)"RM_OVER_WIRE";
-        case 3U: return (const int8 *)"R_OVER_WIRE";
-        case 4U: return (const int8 *)"STRAIGHT_LEFT";
-        case 5U: return (const int8 *)"STRAIGHT_RIGHT";
-        case 6U: return (const int8 *)"LEFT_ENTRY";
-        case 7U: return (const int8 *)"LEFT_TURN";
-        case 8U: return (const int8 *)"RIGHT_ENTRY";
-        case 9U: return (const int8 *)"RIGHT_TURN";
-        default: return (const int8 *)"REVIEW";
-    }
-}
-
-static const int8 *guide_action_text(void)
-{
-    switch (guide_step)
-    {
-        case 0U: return (const int8 *)"L ON WIRE; SEND NEXT";
-        case 1U: return (const int8 *)"LM ON WIRE; SEND NEXT";
-        case 2U: return (const int8 *)"RM ON WIRE; SEND NEXT";
-        case 3U: return (const int8 *)"R ON WIRE; SEND NEXT";
-        case 4U: return (const int8 *)"CAR AT LEFT LIMIT; SEND NEXT";
-        case 5U: return (const int8 *)"CAR AT RIGHT LIMIT; SEND NEXT";
-        case 6U: return (const int8 *)"LEFT CORNER ENTRY; SEND NEXT";
-        case 7U: return (const int8 *)"LEFT CORNER TURN; SEND NEXT";
-        case 8U: return (const int8 *)"RIGHT CORNER ENTRY; SEND NEXT";
-        case 9U: return (const int8 *)"RIGHT CORNER TURN; SEND NEXT";
-        default: return (const int8 *)"CHECK REVIEW";
-    }
-}
-
 static uint8 guide_command_equals(const int8 *expected)
 {
     uint8 index = 0U;
@@ -214,7 +259,26 @@ static uint8 guide_command_equals(const int8 *expected)
 
 static void guide_send_reply(const char *reply)
 {
-    wireless_uart_send_string(reply);
+    if (scope_state != SCOPE_ACTIVE
+        && scope_state != SCOPE_TEST_ACTIVE)
+    {
+        wireless_uart_send_string(reply);
+    }
+}
+
+static void guide_send_ttest_error(const int8 *reason)
+{
+    uint32 reply_length = zf_sprintf(
+        guide_reply_buffer,
+        (const int8 *)"ERR:TTEST %s\r\n",
+        reason);
+
+    if (reply_length >= GUIDE_REPLY_SIZE)
+    {
+        reply_length = GUIDE_REPLY_SIZE - 1U;
+    }
+    guide_reply_buffer[reply_length] = '\0';
+    guide_send_reply((const char *)guide_reply_buffer);
 }
 
 static void guide_send_motor_test_started(MotorTestSide side)
@@ -228,7 +292,7 @@ static void guide_send_motor_test_started(MotorTestSide side)
 
     reply_length = zf_sprintf(
         guide_reply_buffer,
-        (const int8 *)"OK: MTEST %s START PWM=%u PRECHECK=%uMS RUN=%uMS AUTO_STOP\r\n",
+        (const int8 *)"OK:MTEST %s PWM=%u PRE=%u T=%uMS\r\n",
         side_text,
         (uint32)motion_runtime_motor_test_pwm_value(),
         (uint32)MOTOR_TEST_PRECHECK_MS,
@@ -241,11 +305,19 @@ static void guide_send_motor_test_started(MotorTestSide side)
     guide_send_reply((const char *)guide_reply_buffer);
 }
 
+static void guide_send_track_test_started(void)
+{
+    guide_send_reply(
+        "OK:TTEST Z07/T10TRACK V180 T2500 P15 DB20 TL100\r\n");
+}
+
 static void guide_send_runtime_config(void)
 {
-    uint32 reply_length = zf_sprintf(
+    uint32 reply_length;
+
+    reply_length = zf_sprintf(
         guide_reply_buffer,
-        (const int8 *)"CFG: PWM_LIMIT=%u MTEST_PWM=%u MTEST_B_PWM=%u MTEST_MS=%u PRECHECK_MS=%u LDIR=%u RDIR=%u\r\n",
+        (const int8 *)"CFG:PWM=%u ML=%u MB=%u MT=%u PRE=%u LD=%u RD=%u\r\n",
         (uint32)MOTOR_PWM_LIMIT_VALUE,
         (uint32)MOTOR_TEST_PWM_VALUE,
         (uint32)MOTOR_TEST_BOTH_PWM_VALUE,
@@ -259,6 +331,151 @@ static void guide_send_runtime_config(void)
     }
     guide_reply_buffer[reply_length] = '\0';
     guide_send_reply((const char *)guide_reply_buffer);
+
+    guide_send_reply(
+        "CFG2:T10TRACK V180 T2500 L50 G500 PI59/50 P15 DB20 TL100\r\n");
+}
+
+static const int8 *guide_track_test_precheck(void)
+{
+    if (guide_state != GUIDE_IDLE)
+    {
+        return (const int8 *)"GUIDE";
+    }
+    if (motion_runtime_track_test_is_active())
+    {
+        return (const int8 *)"BUSY";
+    }
+    if (g_motion_run_unlocked)
+    {
+        return (const int8 *)"RUNLOCK";
+    }
+    if (element4_is_enabled())
+    {
+        return (const int8 *)"ELEM";
+    }
+    if (negative_pressure_enabled
+        || negative_pressure_armed
+        || negative_pressure_state != NEGATIVE_PRESSURE_STATE_OFF
+        || negative_pressure_real_output_percent != 0U)
+    {
+        return (const int8 *)"FAN";
+    }
+    if (g_imu_runtime_state != IMU_RUNTIME_READY)
+    {
+        return (const int8 *)"IMU";
+    }
+    if (g_motion_protect_reason != MOTION_PROTECT_NONE)
+    {
+        return (const int8 *)"SAFE;CLEAR";
+    }
+    if (motion_runtime_encoder_mode_mask() != 0x03U)
+    {
+        return (const int8 *)"ENCMODE";
+    }
+    if (!inductance4_calibration_valid)
+    {
+        return (const int8 *)"CAL";
+    }
+    if (!inductance4_line_is_present())
+    {
+        return (const int8 *)"LINE";
+    }
+    if (!motion_runtime_motor_test_both_passed())
+    {
+        return (const int8 *)"MTESTB";
+    }
+    return NULL;
+}
+
+static void scope_service_arm(void)
+{
+    uint8 due;
+    uint8 started;
+    const int8 *reason;
+
+    if (scope_state == SCOPE_TEST_ACTIVE)
+    {
+        interrupt_global_disable();
+        due = (uint8)(g_scope_arm_active && g_scope_arm_ticks == 0U);
+        if (due)
+        {
+            g_scope_arm_active = 0U;
+            g_scope_capture_enabled = 0U;
+            g_scope_test_mode = 0U;
+            g_scope_snapshot_ready = 0U;
+        }
+        interrupt_global_enable();
+        if (due)
+        {
+            scope_state = SCOPE_OFF;
+        }
+        return;
+    }
+
+    if (scope_state != SCOPE_ARMED
+        && scope_state != SCOPE_TEST_ARMED)
+    {
+        return;
+    }
+
+    interrupt_global_disable();
+    due = (uint8)(g_scope_arm_active && g_scope_arm_ticks == 0U);
+    interrupt_global_enable();
+    if (!due)
+    {
+        return;
+    }
+
+    if (scope_state == SCOPE_TEST_ARMED)
+    {
+        interrupt_global_disable();
+        g_scope_snapshot_ready = 0U;
+        g_scope_test_mode = 1U;
+        g_scope_capture_enabled = 1U;
+        g_scope_arm_ticks = SCOPE_TEST_TICKS;
+        g_scope_arm_active = 1U;
+        scope_state = SCOPE_TEST_ACTIVE;
+        interrupt_global_enable();
+        return;
+    }
+
+    reason = guide_track_test_precheck();
+    if (reason != NULL)
+    {
+        interrupt_global_disable();
+        g_scope_arm_active = 0U;
+        g_scope_capture_enabled = 0U;
+        g_scope_test_mode = 0U;
+        g_scope_snapshot_ready = 0U;
+        interrupt_global_enable();
+        scope_state = SCOPE_OFF;
+        guide_send_ttest_error(reason);
+        return;
+    }
+
+    interrupt_global_disable();
+    g_scope_arm_active = 0U;
+    g_scope_snapshot_ready = 0U;
+    g_scope_test_mode = 0U;
+    track_result_valid = 0U;
+    started = motion_runtime_track_test_start();
+    if (started)
+    {
+        g_scope_capture_enabled = 1U;
+        scope_state = SCOPE_ACTIVE;
+    }
+    else
+    {
+        g_scope_capture_enabled = 0U;
+        scope_state = SCOPE_OFF;
+    }
+    interrupt_global_enable();
+
+    if (!started)
+    {
+        guide_send_ttest_error((const int8 *)"STATE");
+    }
 }
 
 static void guide_rearm_wireless_receiver(void)
@@ -282,10 +499,12 @@ static void guide_rearm_wireless_receiver(void)
 
 static void guide_cancel(void)
 {
+	motion_runtime_track_test_stop();
+	motion_runtime_encoder_test_stop();
 	motion_runtime_motor_test_stop();
     if (guide_state == GUIDE_IDLE)
     {
-        guide_send_reply("OK: GUIDE ALREADY IDLE\r\n");
+        guide_send_reply("OK:GUIDE IDLE\r\n");
         return;
     }
 
@@ -294,11 +513,13 @@ static void guide_cancel(void)
     guide_state = GUIDE_IDLE;
     guide_step = 0U;
     guide_status_pending = 0U;
-    guide_send_reply("OK: GUIDE CANCELLED, OLD CAL RESTORED\r\n");
+    guide_send_reply("OK:CANCEL OLD=RESTORED\r\n");
 }
 
 static void guide_start(void)
 {
+	motion_runtime_track_test_stop();
+	motion_runtime_encoder_test_stop();
 	motion_runtime_motor_test_stop();
     if (guide_state != GUIDE_IDLE)
     {
@@ -315,7 +536,7 @@ static void guide_start(void)
     guide_window_active = 0U;
     guide_capture_remaining = 0U;
     guide_status_pending = 1U;
-    guide_send_reply("OK: GUIDE STARTED, STEP 1 L_OVER_WIRE\r\n");
+    guide_send_reply("OK:GUIDE 1 L_OVER_WIRE\r\n");
 }
 
 static void guide_finish_capture(void)
@@ -329,7 +550,7 @@ static void guide_finish_capture(void)
     if (guide_step < GUIDE_STEP_COUNT)
     {
         guide_status_pending = 1U;
-        guide_send_reply("OK: STEP SAVED, FOLLOW NEXT ACTION\r\n");
+        guide_send_reply("OK:STEP SAVED\r\n");
         return;
     }
 
@@ -337,28 +558,30 @@ static void guide_finish_capture(void)
     {
         guide_state = GUIDE_REVIEW_PASS;
         guide_status_pending = 1U;
-        guide_send_reply("OK: REVIEW PASS, SEND SAVE OR CANCEL\r\n");
+        guide_send_reply("OK:REVIEW PASS\r\n");
     }
     else
     {
         guide_state = GUIDE_REVIEW_FAIL;
         inductance4_set_calibration(guide_old_min, guide_old_max);
         guide_status_pending = 1U;
-        guide_send_reply("ERROR: REVIEW FAIL, SEND CAL START TO RETRY\r\n");
+        guide_send_reply("ERR:REVIEW;CAL START\r\n");
     }
 }
 
 static void guide_capture_next(void)
 {
+	motion_runtime_track_test_stop();
+	motion_runtime_encoder_test_stop();
 	motion_runtime_motor_test_stop();
     if (guide_state != GUIDE_COLLECTING)
     {
-        guide_send_reply("ERROR: SEND CAL START FIRST\r\n");
+        guide_send_reply("ERR:CAL START FIRST\r\n");
         return;
     }
     if (guide_capture_remaining > 0U)
     {
-        guide_send_reply("WAIT: CAPTURE RUNNING, HOLD STILL\r\n");
+        guide_send_reply("WAIT:CAPTURE HOLD\r\n");
         return;
     }
 
@@ -367,15 +590,17 @@ static void guide_capture_next(void)
     guide_reset_window();
     guide_capture_remaining = GUIDE_CAPTURE_SAMPLES;
     guide_status_pending = 1U;
-    guide_send_reply("OK: CAPTURING, HOLD STILL ABOUT 1 SECOND\r\n");
+    guide_send_reply("OK:CAPTURE 1S HOLD\r\n");
 }
 
 static void guide_save(void)
 {
+	motion_runtime_track_test_stop();
+	motion_runtime_encoder_test_stop();
 	motion_runtime_motor_test_stop();
     if (guide_state != GUIDE_REVIEW_PASS)
     {
-        guide_send_reply("ERROR: GUIDE NOT PASSED, CANNOT SAVE\r\n");
+        guide_send_reply("ERR:GUIDE NOT PASS\r\n");
         return;
     }
 
@@ -392,8 +617,52 @@ static void guide_save(void)
 
 static void guide_process_command(void)
 {
+    if ((scope_state == SCOPE_ACTIVE
+         || scope_state == SCOPE_TEST_ACTIVE)
+        && !guide_command_equals((const int8 *)"STOP")
+        && !guide_command_equals((const int8 *)"TTEST STOP"))
+    {
+        guide_command_length = 0U;
+        return;
+    }
+    if ((scope_state == SCOPE_ARMED
+         || scope_state == SCOPE_TEST_ARMED)
+        && !guide_command_equals((const int8 *)"STOP")
+        && !guide_command_equals((const int8 *)"TTEST STOP"))
+    {
+        guide_send_reply("ERR:SCOPE ARMED;STOP\r\n");
+        guide_command_length = 0U;
+        return;
+    }
+
     if (guide_command_equals((const int8 *)"STOP"))
     {
+        if (scope_state == SCOPE_ARMED
+            || scope_state == SCOPE_TEST_ARMED
+            || scope_state == SCOPE_TEST_ACTIVE)
+        {
+            interrupt_global_disable();
+            g_scope_arm_active = 0U;
+            g_scope_arm_ticks = 0U;
+            g_scope_capture_enabled = 0U;
+            g_scope_test_mode = 0U;
+            g_scope_snapshot_ready = 0U;
+			interrupt_global_enable();
+			scope_state = SCOPE_OFF;
+		}
+		else if (scope_state == SCOPE_ACTIVE)
+		{
+			interrupt_global_disable();
+			g_scope_capture_enabled = 0U;
+			g_scope_snapshot_ready = 0U;
+			interrupt_global_enable();
+			motion_runtime_track_test_stop();
+			track_test_report_event();
+		}
+		else
+		{
+			motion_runtime_track_test_stop();
+		}
 		motion_runtime_encoder_test_stop();
 		motion_runtime_motor_test_stop();
         pwm_state = 0U;
@@ -404,11 +673,12 @@ static void guide_process_command(void)
     }
     else if (guide_command_equals((const int8 *)"CLEAR"))
     {
+		motion_runtime_track_test_stop();
 		motion_runtime_encoder_test_stop();
 		motion_runtime_motor_test_stop();
         if (motion_runtime_clear_protection())
         {
-            guide_send_reply("OK: PROTECTION CLEARED, RUN REMAINS LOCKED\r\n");
+            guide_send_reply("OK:CLEAR LOCK=1\r\n");
         }
         else
         {
@@ -417,23 +687,25 @@ static void guide_process_command(void)
     }
     else if (guide_command_equals((const int8 *)"RUN"))
     {
-		motion_runtime_encoder_test_stop();
-		motion_runtime_motor_test_stop();
-        if (motion_runtime_can_run())
+        if (motion_runtime_track_test_is_active())
         {
-            pwm_state = 1U;
-            Pwmout = 1U;
-            guide_send_reply("OK: MOTOR RUN\r\n");
+            guide_send_ttest_error((const int8 *)"RUN;STOP FIRST");
         }
         else
         {
+			motion_runtime_encoder_test_stop();
+			motion_runtime_motor_test_stop();
             pwm_state = 0U;
             Pwmout = 0U;
-            guide_send_reply("ERROR: RUN LOCKED FOR IMU AND ENCODER DIAGNOSIS\r\n");
+            change_speed_Target_base(0);
+            reset_motion_pid_state();
+            motion_runtime_force_stop();
+            guide_send_reply("ERR:RUN USE TTEST\r\n");
         }
     }
     else if (guide_command_equals((const int8 *)"IMU CAL"))
     {
+		motion_runtime_track_test_stop();
 		motion_runtime_encoder_test_stop();
 		motion_runtime_motor_test_stop();
         pwm_state = 0U;
@@ -441,30 +713,191 @@ static void guide_process_command(void)
         motion_runtime_force_stop();
         if (motion_runtime_calibrate_imu(400U, 5U))
         {
-            guide_send_reply("OK: IMU660RB CALIBRATED, KEEP CAR STILL DURING BOOT\r\n");
+            guide_send_reply("OK:IMU CAL\r\n");
         }
         else
         {
-            guide_send_reply("ERROR: IMU660RB CALIBRATION UNSTABLE\r\n");
+            guide_send_reply("ERR:IMU UNSTABLE\r\n");
         }
     }
     else if (guide_command_equals((const int8 *)"ELEMENTS OFF"))
     {
+		motion_runtime_track_test_stop();
 		motion_runtime_encoder_test_stop();
 		motion_runtime_motor_test_stop();
         element4_set_enabled(0U);
         guide_send_reply("OK: ELEMENTS OFF\r\n");
     }
+    else if (guide_command_equals((const int8 *)"SCOPE TEST"))
+    {
+		motion_runtime_track_test_stop();
+		motion_runtime_encoder_test_stop();
+		motion_runtime_motor_test_stop();
+        pwm_state = 0U;
+        Pwmout = 0U;
+        change_speed_Target_base(0);
+        reset_motion_pid_state();
+        motion_runtime_force_stop();
+        motion_runtime_set_run_unlocked(0U);
+        element4_set_enabled(0U);
+        negative_pressure_set_enabled(0U);
+        diagnostic_compact_pending = 0U;
+        guide_status_pending = 0U;
+        encoder_test_report_pending = ENCODER_TEST_RESULT_IDLE;
+        motor_test_report_pending = MOTOR_TEST_RESULT_IDLE;
+        track_test_report_pending = TRACK_TEST_RESULT_IDLE;
+        track_result_valid = 0U;
+        scope_state = SCOPE_TEST_ARMED;
+        interrupt_global_disable();
+        g_scope_capture_enabled = 0U;
+        g_scope_test_mode = 0U;
+        g_scope_snapshot_ready = 0U;
+        g_scope_arm_ticks = SCOPE_ARM_TICKS;
+        g_scope_arm_active = 1U;
+        interrupt_global_enable();
+        guide_send_reply(
+            "OK:SCOPE TEST ARM=2000MS BIN=V2/8CH/50HZ MOTOR=LOCKED\r\n");
+    }
+    else if (guide_command_equals((const int8 *)"TTEST STOP"))
+    {
+        uint8 stopped = 0U;
+
+        if (scope_state == SCOPE_ARMED
+            || scope_state == SCOPE_TEST_ARMED
+            || scope_state == SCOPE_TEST_ACTIVE)
+        {
+            interrupt_global_disable();
+            g_scope_arm_active = 0U;
+            g_scope_arm_ticks = 0U;
+            g_scope_capture_enabled = 0U;
+            g_scope_test_mode = 0U;
+            g_scope_snapshot_ready = 0U;
+            interrupt_global_enable();
+            scope_state = SCOPE_OFF;
+            stopped = 1U;
+        }
+        else if (scope_state == SCOPE_ACTIVE)
+        {
+            interrupt_global_disable();
+            g_scope_capture_enabled = 0U;
+            g_scope_snapshot_ready = 0U;
+            interrupt_global_enable();
+            stopped = motion_runtime_track_test_stop();
+            track_test_report_event();
+        }
+        else
+        {
+            stopped = motion_runtime_track_test_stop();
+        }
+
+        if (stopped)
+        {
+            guide_send_reply("OK:TTEST STOP LOCK=1\r\n");
+        }
+        else
+        {
+            guide_send_reply("OK:TTEST IDLE\r\n");
+        }
+    }
+    else if (guide_command_equals((const int8 *)"TTEST SCOPE"))
+    {
+        const int8 *reason;
+
+		motion_runtime_track_test_stop();
+		motion_runtime_encoder_test_stop();
+		motion_runtime_motor_test_stop();
+		pwm_state = 0U;
+		Pwmout = 0U;
+		change_speed_Target_base(0);
+		reset_motion_pid_state();
+		motion_runtime_force_stop();
+
+        reason = guide_track_test_precheck();
+        if (reason != NULL)
+        {
+            guide_send_ttest_error(reason);
+        }
+        else
+        {
+            diagnostic_compact_pending = 0U;
+            guide_status_pending = 0U;
+            encoder_test_report_pending = ENCODER_TEST_RESULT_IDLE;
+            motor_test_report_pending = MOTOR_TEST_RESULT_IDLE;
+            track_test_report_pending = TRACK_TEST_RESULT_IDLE;
+            track_result_valid = 0U;
+            scope_state = SCOPE_ARMED;
+            interrupt_global_disable();
+            g_scope_capture_enabled = 0U;
+            g_scope_test_mode = 0U;
+            g_scope_snapshot_ready = 0U;
+            g_scope_arm_ticks = SCOPE_ARM_TICKS;
+            g_scope_arm_active = 1U;
+            interrupt_global_enable();
+            guide_send_reply(
+                "OK:SCOPE Z07/T10TRACK ARM=2000MS BIN=V2/8CH/50HZ TRESULT=AFTER\r\n");
+        }
+    }
+    else if (guide_command_equals((const int8 *)"TTEST"))
+    {
+        const int8 *reason;
+
+		motion_runtime_encoder_test_stop();
+		motion_runtime_motor_test_stop();
+		pwm_state = 0U;
+		Pwmout = 0U;
+		change_speed_Target_base(0);
+		reset_motion_pid_state();
+		motion_runtime_force_stop();
+
+        reason = guide_track_test_precheck();
+        if (reason != NULL)
+        {
+            guide_send_ttest_error(reason);
+        }
+        else
+        {
+            interrupt_global_disable();
+            g_scope_arm_active = 0U;
+            g_scope_arm_ticks = 0U;
+            g_scope_capture_enabled = 0U;
+            g_scope_test_mode = 0U;
+            g_scope_snapshot_ready = 0U;
+            scope_state = SCOPE_OFF;
+            track_result_valid = 0U;
+            if (motion_runtime_track_test_start())
+            {
+                interrupt_global_enable();
+                guide_send_track_test_started();
+            }
+            else
+            {
+                interrupt_global_enable();
+                guide_send_ttest_error((const int8 *)"STATE");
+            }
+        }
+    }
+    else if (guide_command_equals((const int8 *)"TRESULT"))
+    {
+        if (track_result_valid)
+        {
+            track_test_report_pending = track_result_snapshot.result;
+        }
+        else
+        {
+            guide_send_reply("ERR:TRESULT NONE\r\n");
+        }
+    }
     else if (guide_command_equals((const int8 *)"MTEST STOP"))
     {
+		motion_runtime_track_test_stop();
 		motion_runtime_encoder_test_stop();
 		if (motion_runtime_motor_test_stop())
 		{
-			guide_send_reply("OK: MTEST STOPPED\r\n");
+			guide_send_reply("OK:MTEST STOP\r\n");
 		}
 		else
 		{
-			guide_send_reply("OK: MTEST ALREADY STOPPED\r\n");
+			guide_send_reply("OK:MTEST IDLE\r\n");
 		}
     }
     else if (guide_command_equals((const int8 *)"MTEST L")
@@ -477,6 +910,7 @@ static void guide_process_command(void)
 				? MOTOR_TEST_SIDE_RIGHT
 				: MOTOR_TEST_SIDE_BOTH);
 
+		motion_runtime_track_test_stop();
 		motion_runtime_encoder_test_stop();
 		motion_runtime_motor_test_stop();
 		pwm_state = 0U;
@@ -484,19 +918,19 @@ static void guide_process_command(void)
 		reset_motion_pid_state();
 		if (guide_state != GUIDE_IDLE)
 		{
-			guide_send_reply("ERROR: MTEST DISABLED DURING CALIBRATION GUIDE\r\n");
+			guide_send_reply("ERR:MTEST GUIDE\r\n");
 		}
 		else if (element4_is_enabled())
 		{
-			guide_send_reply("ERROR: MTEST REQUIRES ELEMENTS OFF\r\n");
+			guide_send_reply("ERR:MTEST ELEM\r\n");
 		}
 		else if (g_imu_runtime_state != IMU_RUNTIME_READY)
 		{
-			guide_send_reply("ERROR: MTEST REQUIRES IMU STATE OK\r\n");
+			guide_send_reply("ERR:MTEST IMU\r\n");
 		}
 		else if (g_motion_protect_reason != MOTION_PROTECT_NONE)
 		{
-			guide_send_reply("ERROR: MTEST PROTECTION ACTIVE; SEND CLEAR\r\n");
+			guide_send_reply("ERR:MTEST SAFE;CLEAR\r\n");
 		}
 		else
 		{
@@ -509,19 +943,20 @@ static void guide_process_command(void)
 			else
 			{
 				interrupt_global_enable();
-				guide_send_reply("ERROR: MTEST START REJECTED BY SAFETY STATE\r\n");
+				guide_send_reply("ERR:MTEST STATE\r\n");
 			}
 		}
     }
     else if (guide_command_equals((const int8 *)"ETEST STOP"))
     {
+		motion_runtime_track_test_stop();
 		if (motion_runtime_encoder_test_stop())
 		{
-			guide_send_reply("OK: ETEST STOPPED\r\n");
+			guide_send_reply("OK:ETEST STOP\r\n");
 		}
 		else
 		{
-			guide_send_reply("OK: ETEST ALREADY STOPPED\r\n");
+			guide_send_reply("OK:ETEST IDLE\r\n");
 		}
     }
     else if (guide_command_equals((const int8 *)"ETEST L")
@@ -531,6 +966,7 @@ static void guide_process_command(void)
 			? MOTOR_TEST_SIDE_LEFT
 			: MOTOR_TEST_SIDE_RIGHT;
 
+		motion_runtime_track_test_stop();
 		motion_runtime_motor_test_stop();
 		motion_runtime_encoder_test_stop();
 		pwm_state = 0U;
@@ -539,15 +975,15 @@ static void guide_process_command(void)
 		motion_runtime_force_stop();
 		if (guide_state != GUIDE_IDLE)
 		{
-			guide_send_reply("ERROR: ETEST DISABLED DURING CALIBRATION GUIDE\r\n");
+			guide_send_reply("ERR:ETEST GUIDE\r\n");
 		}
 		else if (element4_is_enabled())
 		{
-			guide_send_reply("ERROR: ETEST REQUIRES ELEMENTS OFF\r\n");
+			guide_send_reply("ERR:ETEST ELEM\r\n");
 		}
 		else if (motion_runtime_encoder_mode_mask() != 0x03U)
 		{
-			guide_send_reply("ERROR: ETEST ENCODER MODE INVALID\r\n");
+			guide_send_reply("ERR:ETEST ENCMODE\r\n");
 		}
 		else
 		{
@@ -556,23 +992,25 @@ static void guide_process_command(void)
 			{
 				interrupt_global_enable();
 				guide_send_reply(side == MOTOR_TEST_SIDE_LEFT
-					? "OK: ETEST L START NO_PWM TIME=15S; TURN LEFT WHEEL BY HAND\r\n"
-					: "OK: ETEST R START NO_PWM TIME=15S; TURN RIGHT WHEEL BY HAND\r\n");
+					? "OK:ETEST L 15S HAND\r\n"
+					: "OK:ETEST R 15S HAND\r\n");
 			}
 			else
 			{
 				interrupt_global_enable();
-				guide_send_reply("ERROR: ETEST START REJECTED BY SAFETY STATE\r\n");
+				guide_send_reply("ERR:ETEST STATE\r\n");
 			}
 		}
     }
     else if (guide_command_equals((const int8 *)"ELEMENTS ON"))
     {
+		motion_runtime_track_test_stop();
+		motion_runtime_encoder_test_stop();
 		motion_runtime_motor_test_stop();
         if (!g_motion_run_unlocked)
         {
             element4_set_enabled(0U);
-            guide_send_reply("ERROR: ELEMENTS LOCKED UNTIL BASE TRACKING PASSES\r\n");
+            guide_send_reply("ERR:ELEM LOCK\r\n");
         }
         else
         {
@@ -612,7 +1050,7 @@ static void guide_process_command(void)
     {
         if (guide_state == GUIDE_IDLE)
         {
-            diagnostic_full_pending = 1U;
+            diagnostic_compact_pending = 1U;
         }
         else
         {
@@ -621,19 +1059,15 @@ static void guide_process_command(void)
     }
     else if (guide_command_equals((const int8 *)"STREAM ON"))
     {
-        diagnostic_stream_due = 0U;
-        diagnostic_stream_enabled = 1U;
-        guide_send_reply("OK: STREAM ON PERIOD=5S; SEND STREAM OFF TO STOP\r\n");
+        guide_send_reply("ERR:STREAM DISABLED\r\n");
     }
     else if (guide_command_equals((const int8 *)"STREAM OFF"))
     {
-        diagnostic_stream_enabled = 0U;
-        diagnostic_stream_due = 0U;
         guide_send_reply("OK: STREAM OFF\r\n");
     }
     else
     {
-        guide_send_reply("ERROR: USE STATUS / STATUS FULL / STREAM ON / STREAM OFF / STOP / CLEAR / RUN / MTEST L / MTEST R / MTEST B / MTEST STOP / ETEST L / ETEST R / ETEST STOP / IMU CAL / ELEMENTS OFF / CAL START / NEXT / SAVE / CANCEL\r\n");
+        guide_send_reply("ERR:CMD\r\n");
     }
 
     guide_command_length = 0U;
@@ -705,29 +1139,6 @@ static const int8 *diagnostic_adc_text(void)
         : (const int8 *)"BAD";
 }
 
-static const int8 *diagnostic_guard_text(void)
-{
-    switch (motion_direction_guard_mask())
-    {
-        case 0x01U: return (const int8 *)"L";
-        case 0x02U: return (const int8 *)"R";
-        case 0x03U: return (const int8 *)"LR";
-        default: return (const int8 *)"NONE";
-    }
-}
-
-static const int8 *diagnostic_calibration_text(void)
-{
-    if (inductance4_calibration_active)
-    {
-        return (const int8 *)"RUN";
-    }
-
-    return inductance4_calibration_valid
-        ? (const int8 *)"READY"
-        : (const int8 *)"NEEDED";
-}
-
 static const int8 *diagnostic_motor_text(void)
 {
     if (pwm_state == 2U)
@@ -741,6 +1152,10 @@ static const int8 *diagnostic_motor_text(void)
     if (motion_runtime_encoder_test_is_active())
     {
         return (const int8 *)"ETEST";
+    }
+    if (motion_runtime_track_test_is_active())
+    {
+        return (const int8 *)"TTEST";
     }
     if (!g_motion_run_unlocked)
     {
@@ -784,6 +1199,58 @@ static void diagnostic_append_text(const int8 *label, const int8 *value)
         value);
 }
 
+static uint8 send_scope_frame(void)
+{
+    uint8 channel;
+    uint8 index;
+    uint8 checksum = 0xAAU;
+    uint8 *bytes;
+
+    if (gpio_get_level(WIRELESS_UART_RTS_PIN))
+    {
+        return 0U;
+    }
+
+    interrupt_global_disable();
+    if (!g_scope_snapshot_ready)
+    {
+        interrupt_global_enable();
+        return 0U;
+    }
+    for (channel = 0U; channel < SCOPE_CHANNEL_COUNT; channel++)
+    {
+        scope_tx_values[channel] = g_scope_snapshot[channel];
+    }
+    g_scope_snapshot_ready = 0U;
+    interrupt_global_enable();
+
+    scope_packet[0] = 0xAAU;
+    scope_packet[1] = 0U;
+    scope_packet[2] = 0x10U;
+    scope_packet[3] = SCOPE_CHANNEL_COUNT;
+    scope_packet[4] = 0x01U;
+    scope_packet[5] = 0U;
+    scope_packet[6] = 0U;
+    scope_packet[7] = 0U;
+    for (channel = 0U; channel < SCOPE_CHANNEL_COUNT; channel++)
+    {
+        bytes = (uint8 *)&scope_tx_values[channel];
+        index = (uint8)(8U + channel * 4U);
+        scope_packet[index] = bytes[0];
+        scope_packet[index + 1U] = bytes[1];
+        scope_packet[index + 2U] = bytes[2];
+        scope_packet[index + 3U] = bytes[3];
+    }
+    for (index = 2U; index < SCOPE_PACKET_SIZE; index++)
+    {
+        checksum += scope_packet[index];
+    }
+    scope_packet[1] = checksum;
+    return (uint8)(wireless_uart_send_buffer(
+        scope_packet,
+        SCOPE_PACKET_SIZE) == 0U);
+}
+
 static uint8 send_compact_status_frame(void)
 {
     if (gpio_get_level(WIRELESS_UART_RTS_PIN))
@@ -801,34 +1268,41 @@ static uint8 send_compact_status_frame(void)
                            element4_is_enabled()
                                ? (const int8 *)"ON"
                                : (const int8 *)"OFF");
-    diagnostic_append_text((const int8 *)" STREAM=",
-                           diagnostic_stream_enabled
-                               ? (const int8 *)"ON"
-                               : (const int8 *)"OFF");
+    diagnostic_append_text((const int8 *)" STREAM=", (const int8 *)"OFF");
     diagnostic_append_u32((const int8 *)" RUNLOCK=",
                           (uint32)!g_motion_run_unlocked);
     diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
 
-    diagnostic_append_text((const int8 *)"MTEST: SIDE=",
+    diagnostic_append_text((const int8 *)"MT:S=",
                            (const int8 *)motion_runtime_motor_test_side_text());
-    diagnostic_append_text((const int8 *)" RESULT=",
+    diagnostic_append_text((const int8 *)" R=",
                            (const int8 *)motion_runtime_motor_test_result_text());
-    diagnostic_append_u32((const int8 *)" PWM=",
+    diagnostic_append_u32((const int8 *)" P=",
                           (uint32)motion_runtime_motor_test_pwm_value());
-    diagnostic_append_u32((const int8 *)" RUN_MS=",
+    diagnostic_append_u32((const int8 *)" T=",
                           (uint32)MOTOR_TEST_DURATION_MS);
-    diagnostic_append_u32((const int8 *)" PULSES=",
+    diagnostic_append_u32((const int8 *)" N=",
                           motion_runtime_motor_test_pulse_total());
-    diagnostic_append_u32((const int8 *)" PEAK=",
+    diagnostic_append_u32((const int8 *)" PK=",
                           (uint32)motion_runtime_motor_test_peak_raw());
     diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
 
-    diagnostic_append_text((const int8 *)"ETEST: SIDE=",
+    diagnostic_append_text((const int8 *)"ET:S=",
                            (const int8 *)motion_runtime_encoder_test_side_text());
-    diagnostic_append_text((const int8 *)" RESULT=",
+    diagnostic_append_text((const int8 *)" R=",
                            (const int8 *)motion_runtime_encoder_test_result_text());
-    diagnostic_append_u32((const int8 *)" REMAIN_MS=",
-                          (uint32)motion_runtime_encoder_test_remaining_ms());
+    diagnostic_append_u32((const int8 *)" MS=",
+                           (uint32)motion_runtime_encoder_test_remaining_ms());
+    diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+    diagnostic_append_text((const int8 *)"TT:R=",
+                           (const int8 *)motion_runtime_track_test_result_text());
+    diagnostic_append_u32((const int8 *)" MS=",
+                          (uint32)motion_runtime_track_test_remaining_ms());
+    diagnostic_append_u32((const int8 *)" V=",
+                          (uint32)TRACK_TEST_TARGET_VALUE);
+    diagnostic_append_u32((const int8 *)" B=",
+                          (uint32)motion_runtime_motor_test_both_passed());
     diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
 
     diagnostic_append_u32((const int8 *)"ENC: LRAW=", (uint32)g_encoder_left_raw);
@@ -867,64 +1341,144 @@ static uint8 send_motor_test_result_frame(MotorTestResult result)
     }
 
     diagnostic_send_offset = 0U;
-    diagnostic_append_text((const int8 *)"MTEST RESULT: SIDE=",
+    diagnostic_append_text((const int8 *)"MTR:S=",
                            (const int8 *)motion_runtime_motor_test_side_text());
-    diagnostic_append_text((const int8 *)" CMD=FORWARD RESULT=",
+    diagnostic_append_text((const int8 *)" R=",
                            motor_test_result_text(result));
-    diagnostic_append_u32((const int8 *)" PWM=",
+    diagnostic_append_u32((const int8 *)" P=",
                           (uint32)motion_runtime_motor_test_pwm_value());
-    diagnostic_append_u32((const int8 *)" RUN_MS=",
+    diagnostic_append_u32((const int8 *)" T=",
                           (uint32)MOTOR_TEST_DURATION_MS);
-    diagnostic_append_u32((const int8 *)" PULSES=",
+    diagnostic_append_u32((const int8 *)" N=",
                           motion_runtime_motor_test_pulse_total());
-    diagnostic_append_u32((const int8 *)" PEAK=",
+    diagnostic_append_u32((const int8 *)" PK=",
                           (uint32)motion_runtime_motor_test_peak_raw());
     diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
 
-    diagnostic_append_u32((const int8 *)"MTEST ENC: LTOTAL=",
+    diagnostic_append_u32((const int8 *)"MTE:L=",
                           motion_runtime_motor_test_left_total());
-    diagnostic_append_u32((const int8 *)" RTOTAL=",
+    diagnostic_append_u32((const int8 *)" R=",
                           motion_runtime_motor_test_right_total());
-    diagnostic_append_u32((const int8 *)" LPEAK=",
+    diagnostic_append_u32((const int8 *)" LP=",
                           (uint32)motion_runtime_motor_test_left_peak());
-    diagnostic_append_u32((const int8 *)" RPEAK=",
+    diagnostic_append_u32((const int8 *)" RP=",
                           (uint32)motion_runtime_motor_test_right_peak());
     diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
 
     if (g_motor_test_side == MOTOR_TEST_SIDE_BOTH)
     {
-        diagnostic_append_u32((const int8 *)"MTEST BAL: DIFF=",
+        diagnostic_append_u32((const int8 *)"MTB:D=",
                               motion_runtime_motor_test_difference());
-        diagnostic_append_u32((const int8 *)" MATCH_X1000=",
+        diagnostic_append_u32((const int8 *)" M=",
                               (uint32)motion_runtime_motor_test_balance_x1000());
         diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
     }
 
-    diagnostic_append_u32((const int8 *)"MTEST PRECHECK: LPEAK=",
+    diagnostic_append_u32((const int8 *)"MTP:L=",
                           (uint32)motion_runtime_motor_test_left_idle_peak());
-    diagnostic_append_u32((const int8 *)" RPEAK=",
+    diagnostic_append_u32((const int8 *)" R=",
                           (uint32)motion_runtime_motor_test_right_idle_peak());
-    diagnostic_append_u32((const int8 *)" T0CT=",
+    diagnostic_append_u32((const int8 *)" T0=",
                           (uint32)((motion_runtime_encoder_mode_mask() & 0x01U) ? 1U : 0U));
-    diagnostic_append_u32((const int8 *)" T3CT=",
+    diagnostic_append_u32((const int8 *)" T3=",
                           (uint32)((motion_runtime_encoder_mode_mask() & 0x02U) ? 1U : 0U));
     diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
 
-    diagnostic_append_text((const int8 *)"MTEST SAFE: PROTECT=",
+    diagnostic_append_text((const int8 *)"MTS:P=",
                            (const int8 *)motion_runtime_protect_reason_text());
-    diagnostic_append_i32((const int8 *)" LPWM=", (int32)g_motor_left_applied_pwm);
-    diagnostic_append_i32((const int8 *)" RPWM=", (int32)g_motor_right_applied_pwm);
+    diagnostic_append_i32((const int8 *)" L=", (int32)g_motor_left_applied_pwm);
+    diagnostic_append_i32((const int8 *)" R=", (int32)g_motor_right_applied_pwm);
     diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
 
     if (result == MOTOR_TEST_RESULT_DONE)
     {
-        diagnostic_append_text((const int8 *)"ACTION: TEST COMPLETE; TURN DRIVER OFF",
+        diagnostic_append_text((const int8 *)"ACT:DONE DRIVER=OFF",
                                (const int8 *)"\r\n");
     }
     else
     {
-        diagnostic_append_text((const int8 *)"ACTION: TEST FAILED; TURN DRIVER OFF; CHECK BEFORE CLEAR",
+        diagnostic_append_text((const int8 *)"ACT:FAIL DRIVER=OFF CHECK/CLEAR",
                                (const int8 *)"\r\n");
+    }
+
+    if (diagnostic_send_offset >= DIAGNOSTIC_TX_BUFFER_SIZE)
+    {
+        return 0U;
+    }
+    uart_write_buffer(
+        WIRELESS_UART_INDEX,
+        (uint8 *)diagnostic_tx_buffer,
+        diagnostic_send_offset);
+    return 1U;
+}
+
+static uint8 send_track_test_result_frame(TrackTestResult result)
+{
+    if (gpio_get_level(WIRELESS_UART_RTS_PIN))
+    {
+        return 0U;
+    }
+
+    diagnostic_send_offset = 0U;
+    diagnostic_append_text((const int8 *)"TTR:Z07/T10TRACK R=",
+                           track_result_snapshot.result_text);
+    diagnostic_append_u32((const int8 *)" N=",
+                          (uint32)track_result_snapshot.sample_count);
+    diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+    diagnostic_append_i32((const int8 *)"TTS:LA10=",
+                          track_result_snapshot.left_average_x10);
+    diagnostic_append_i32((const int8 *)" RA10=",
+                          track_result_snapshot.right_average_x10);
+    diagnostic_append_i32((const int8 *)" LF10=",
+                          track_result_snapshot.left_final_x10);
+    diagnostic_append_i32((const int8 *)" RF10=",
+                          track_result_snapshot.right_final_x10);
+    diagnostic_append_u32((const int8 *)" M1000=",
+                          (uint32)track_result_snapshot.match_x1000);
+    diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+    diagnostic_append_u32((const int8 *)"TS5:N=",
+                          (uint32)track_result_snapshot.start_sample_count);
+    diagnostic_append_u32((const int8 *)" L=",
+                          track_result_snapshot.start_left_total);
+    diagnostic_append_u32((const int8 *)" R=",
+                          track_result_snapshot.start_right_total);
+    diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+    diagnostic_append_u32((const int8 *)"TTP:LF=",
+                          (uint32)track_result_snapshot.left_pwm_final);
+    diagnostic_append_u32((const int8 *)" RF=",
+                          (uint32)track_result_snapshot.right_pwm_final);
+    diagnostic_append_u32((const int8 *)" LS=",
+                          (uint32)track_result_snapshot.left_saturation_count);
+    diagnostic_append_u32((const int8 *)" RS=",
+                          (uint32)track_result_snapshot.right_saturation_count);
+    diagnostic_append_u32((const int8 *)" LR=",
+                          (uint32)track_result_snapshot.left_reversal_count);
+    diagnostic_append_u32((const int8 *)" RR=",
+                          (uint32)track_result_snapshot.right_reversal_count);
+    diagnostic_append_text((const int8 *)" P=",
+                           track_result_snapshot.protect_text);
+    diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+    if (result == TRACK_TEST_RESULT_DONE)
+    {
+        diagnostic_append_text(
+            (const int8 *)"ACT:DONE LOCK=1 DRIVER=OFF",
+            (const int8 *)"\r\n");
+    }
+    else if (result == TRACK_TEST_RESULT_STOPPED)
+    {
+        diagnostic_append_text(
+            (const int8 *)"ACT:STOP LOCK=1",
+            (const int8 *)"\r\n");
+    }
+    else
+    {
+        diagnostic_append_text(
+            (const int8 *)"ACT:FAIL LOCK=1 CHECK/CLEAR",
+            (const int8 *)"\r\n");
     }
 
     if (diagnostic_send_offset >= DIAGNOSTIC_TX_BUFFER_SIZE)
@@ -946,44 +1500,44 @@ static uint8 send_encoder_test_result_frame(EncoderTestResult result)
     }
 
     diagnostic_send_offset = 0U;
-    diagnostic_append_text((const int8 *)"ETEST RESULT: SIDE=",
+    diagnostic_append_text((const int8 *)"ETR:S=",
                            (const int8 *)motion_runtime_encoder_test_side_text());
-    diagnostic_append_text((const int8 *)" RESULT=",
+    diagnostic_append_text((const int8 *)" R=",
                            (const int8 *)motion_runtime_encoder_test_result_text());
-    diagnostic_append_text((const int8 *)" NO_PWM=1",
+    diagnostic_append_text((const int8 *)" P=0",
                            (const int8 *)"\r\n");
 
-    diagnostic_append_u32((const int8 *)"ETEST ENC: LTOTAL=",
+    diagnostic_append_u32((const int8 *)"ETE:L=",
                           motion_runtime_encoder_test_left_total());
-    diagnostic_append_u32((const int8 *)" RTOTAL=",
+    diagnostic_append_u32((const int8 *)" R=",
                           motion_runtime_encoder_test_right_total());
-    diagnostic_append_u32((const int8 *)" LPEAK=",
+    diagnostic_append_u32((const int8 *)" LP=",
                           (uint32)motion_runtime_encoder_test_left_peak());
-    diagnostic_append_u32((const int8 *)" RPEAK=",
+    diagnostic_append_u32((const int8 *)" RP=",
                           (uint32)motion_runtime_encoder_test_right_peak());
     diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
 
-    diagnostic_append_u32((const int8 *)"ETEST MODE: T0CT=",
+    diagnostic_append_u32((const int8 *)"ETM:T0=",
                           (uint32)((motion_runtime_encoder_mode_mask() & 0x01U) ? 1U : 0U));
-    diagnostic_append_u32((const int8 *)" T3CT=",
+    diagnostic_append_u32((const int8 *)" T3=",
                           (uint32)((motion_runtime_encoder_mode_mask() & 0x02U) ? 1U : 0U));
-    diagnostic_append_i32((const int8 *)" LPWM=", (int32)g_motor_left_applied_pwm);
-    diagnostic_append_i32((const int8 *)" RPWM=", (int32)g_motor_right_applied_pwm);
+    diagnostic_append_i32((const int8 *)" L=", (int32)g_motor_left_applied_pwm);
+    diagnostic_append_i32((const int8 *)" R=", (int32)g_motor_right_applied_pwm);
     diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
 
     if (result == ENCODER_TEST_RESULT_DONE)
     {
-        diagnostic_append_text((const int8 *)"ACTION: CAPTURE COMPLETE; KEEP DRIVER OFF",
+        diagnostic_append_text((const int8 *)"ACT:DONE DRIVER=OFF",
                                (const int8 *)"\r\n");
     }
     else if (result == ENCODER_TEST_RESULT_STOPPED)
     {
-        diagnostic_append_text((const int8 *)"ACTION: ETEST STOPPED; KEEP DRIVER OFF",
+        diagnostic_append_text((const int8 *)"ACT:STOP DRIVER=OFF",
                                (const int8 *)"\r\n");
     }
     else
     {
-        diagnostic_append_text((const int8 *)"ACTION: ETEST FAILED; CHECK ENCODER MODE",
+        diagnostic_append_text((const int8 *)"ACT:FAIL ENCMODE",
                                (const int8 *)"\r\n");
     }
 
@@ -998,6 +1552,7 @@ static uint8 send_encoder_test_result_frame(EncoderTestResult result)
     return 1U;
 }
 
+#if 0
 static uint8 send_diagnostic_frame(void)
 {
     if (gpio_get_level(WIRELESS_UART_RTS_PIN))
@@ -1012,20 +1567,20 @@ static uint8 send_diagnostic_frame(void)
     diagnostic_append_u32((const int8 *)" R=", (uint32)g_inductance4[INDUCTANCE4_R].filtered);
     diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
 
-    diagnostic_append_text((const int8 *)"MTEST: SIDE=",
+    diagnostic_append_text((const int8 *)"MT:S=",
                            (const int8 *)motion_runtime_motor_test_side_text());
-    diagnostic_append_u32((const int8 *)" REMAIN_MS=",
+    diagnostic_append_u32((const int8 *)" MS=",
                           (uint32)motion_runtime_motor_test_remaining_ms());
     diagnostic_append_u32(
-        (const int8 *)" PWM=",
+        (const int8 *)" P=",
         (uint32)motion_runtime_motor_test_pwm_value());
     diagnostic_append_u32(
-        (const int8 *)" PULSES=",
+        (const int8 *)" N=",
         motion_runtime_motor_test_pulse_total());
     diagnostic_append_u32(
-        (const int8 *)" PEAK=",
+        (const int8 *)" PK=",
         (uint32)motion_runtime_motor_test_peak_raw());
-    diagnostic_append_text((const int8 *)" RESULT=",
+    diagnostic_append_text((const int8 *)" R=",
                            (const int8 *)motion_runtime_motor_test_result_text());
     diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
 
@@ -1132,14 +1687,14 @@ static uint8 send_diagnostic_frame(void)
     }
     else if (guide_state == GUIDE_REVIEW_PASS)
     {
-        diagnostic_append_text((const int8 *)"GUIDE: REVIEW=PASS ACTION=SEND SAVE OR CANCEL",
+        diagnostic_append_text((const int8 *)"GUIDE:PASS ACTION=SAVE/CANCEL",
                                (const int8 *)"\r\n");
     }
     else if (guide_state == GUIDE_REVIEW_FAIL)
     {
-        diagnostic_append_text((const int8 *)"GUIDE: REVIEW=FAIL CHANNEL=",
+        diagnostic_append_text((const int8 *)"GUIDE:FAIL CH=",
                                guide_sensor_name(inductance4_calibration_failed_channel));
-        diagnostic_append_text((const int8 *)" ACTION=SEND CAL START TO RETRY",
+        diagnostic_append_text((const int8 *)" ACTION=CAL START",
                                (const int8 *)"\r\n");
     }
 
@@ -1171,9 +1726,17 @@ static uint8 send_diagnostic_frame(void)
         diagnostic_send_offset);
     return 1U;
 }
+#endif
 
 static void upload_inductance_diagnostics(void)
 {
+    if (scope_state == SCOPE_ACTIVE
+        || scope_state == SCOPE_TEST_ACTIVE)
+    {
+        send_scope_frame();
+        return;
+    }
+
     diagnostic_adc_mask = 0U;
 
     for (diagnostic_channel = 0U;
@@ -1203,10 +1766,18 @@ static void upload_inductance_diagnostics(void)
         }
         return;
     }
+    if (track_test_report_pending != TRACK_TEST_RESULT_IDLE)
+    {
+        if (send_track_test_result_frame(track_test_report_pending))
+        {
+            track_test_report_pending = TRACK_TEST_RESULT_IDLE;
+        }
+        return;
+    }
 
     if (guide_state != GUIDE_IDLE)
     {
-        if (guide_status_pending && send_diagnostic_frame())
+        if (guide_status_pending && send_compact_status_frame())
         {
             guide_status_pending = 0U;
         }
@@ -1222,22 +1793,6 @@ static void upload_inductance_diagnostics(void)
         return;
     }
 
-    if (diagnostic_full_pending)
-    {
-        if (send_diagnostic_frame())
-        {
-            diagnostic_full_pending = 0U;
-        }
-        return;
-    }
-
-    if (diagnostic_stream_enabled && diagnostic_stream_due)
-    {
-        if (send_diagnostic_frame())
-        {
-            diagnostic_stream_due = 0U;
-        }
-    }
 }
 
 
@@ -1307,12 +1862,12 @@ void main()
 		if (g_imu_runtime_state == IMU_RUNTIME_READY)
 		{
 			wireless_uart_send_string(
-				"BOOT: IMU660RB=OK AXIS=Z MOTOR=LOCKED ELEMENTS=OFF\r\n");
+				"BOOT:IMU=OK AXIS=Z LOCK=1 ELEM=0\r\n");
 		}
 		else
 		{
 			wireless_uart_send_string(
-				"BOOT: IMU660RB=ERROR MOTOR=LOCKED ELEMENTS=OFF\r\n");
+				"BOOT:IMU=ERR LOCK=1 ELEM=0\r\n");
 		}
 		guide_send_runtime_config();
 
@@ -1330,9 +1885,12 @@ void main()
 
 			encoder_test_report_event();
 			motor_test_report_event();
+			track_test_report_event();
+            scope_service_arm();
             upload_inductance_diagnostics();
             if (encoder_test_report_pending == ENCODER_TEST_RESULT_IDLE
-                && motor_test_report_pending == MOTOR_TEST_RESULT_IDLE)
+                && motor_test_report_pending == MOTOR_TEST_RESULT_IDLE
+                && track_test_report_pending == TRACK_TEST_RESULT_IDLE)
             {
                 guide_poll_commands();
             }
@@ -1342,6 +1900,13 @@ void main()
                 pwm_state = 0U;
                 Pwmout = 0U;
             }
+			if (scope_state == SCOPE_ARMED
+				|| scope_state == SCOPE_ACTIVE
+				|| scope_state == SCOPE_TEST_ARMED
+				|| scope_state == SCOPE_TEST_ACTIVE)
+			{
+				continue;
+			}
 	
 			lcd_show_status(pwm_state);
 

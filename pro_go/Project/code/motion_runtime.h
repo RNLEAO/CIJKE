@@ -9,6 +9,22 @@
 #define MOTOR_TEST_DURATION_MS  1000U
 #define MOTOR_TEST_PRECHECK_MS  50U
 #define ENCODER_TEST_DURATION_MS 15000U
+#define TRACK_TEST_TARGET_VALUE  180U
+#define TRACK_TEST_DURATION_MS  2500U
+#define TRACK_TEST_LINE_LOST_MS   50U
+#define TRACK_TEST_STARTUP_GRACE_MS 500U
+#define TRACK_TEST_START_ASSIST_ENABLED 0U
+#define TRACK_TEST_STEERING_ENABLED 1U
+#define TRACK_TEST_TURN_GAIN 0.15f
+#define TRACK_TEST_TURN_DEADBAND 0.02f
+#define TRACK_TEST_TURN_RATIO_LIMIT 0.10f
+#if TRACK_TEST_START_ASSIST_ENABLED
+#define TRACK_TEST_TARGET_RAMP_MS 500U
+#define TRACK_TEST_DECEL_RAMP_MS 500U
+#define TRACK_TEST_START_SYNC_SAMPLES 100U
+#define TRACK_TEST_START_SYNC_GAIN 0.35f
+#define TRACK_TEST_START_SYNC_LIMIT 350.0f
+#endif
 
 typedef enum
 {
@@ -66,6 +82,17 @@ typedef enum
     ENCODER_TEST_RESULT_ENCODER_MODE
 } EncoderTestResult;
 
+typedef enum
+{
+    TRACK_TEST_RESULT_IDLE = 0,
+    TRACK_TEST_RESULT_RUNNING,
+    TRACK_TEST_RESULT_DONE,
+    TRACK_TEST_RESULT_STOPPED,
+    TRACK_TEST_RESULT_LINE_LOST,
+    TRACK_TEST_RESULT_IMU,
+    TRACK_TEST_RESULT_PROTECT
+} TrackTestResult;
+
 extern volatile uint8 g_imu_runtime_state;
 extern volatile uint8 g_motion_run_unlocked;
 extern volatile uint8 g_motion_protect_reason;
@@ -100,6 +127,12 @@ extern volatile uint8 g_encoder_test_side;
 extern volatile uint8 g_encoder_test_result;
 extern volatile uint16 g_encoder_test_ticks_remaining;
 
+extern volatile uint8 g_track_test_result;
+extern volatile uint16 g_track_test_ticks_remaining;
+extern volatile uint16 g_track_test_start_sample_count;
+extern volatile uint32 g_track_test_start_left_total;
+extern volatile uint32 g_track_test_start_right_total;
+
 extern float g_track_duty_limit;
 extern float g_speed_pid_delta_limit;
 extern float g_motor_pwm_slew_per_tick;
@@ -123,8 +156,8 @@ void motion_runtime_check_feedback(
     float right_target,
     float left_speed,
     float right_speed,
-    float left_requested_pwm,
-    float right_requested_pwm,
+    float left_applied_pwm,
+    float right_applied_pwm,
     uint8 motor_running);
 
 void motion_runtime_apply_outputs(
@@ -153,6 +186,7 @@ uint8 motion_runtime_encoder_mode_mask(void);
 MotorTestResult motion_runtime_motor_test_take_event(void);
 const char *motion_runtime_motor_test_side_text(void);
 const char *motion_runtime_motor_test_result_text(void);
+uint8 motion_runtime_motor_test_both_passed(void);
 
 uint8 motion_runtime_encoder_test_start(MotorTestSide side);
 uint8 motion_runtime_encoder_test_stop(void);
@@ -166,6 +200,22 @@ uint16 motion_runtime_encoder_test_right_peak(void);
 EncoderTestResult motion_runtime_encoder_test_take_event(void);
 const char *motion_runtime_encoder_test_side_text(void);
 const char *motion_runtime_encoder_test_result_text(void);
+
+uint8 motion_runtime_track_test_start(void);
+uint8 motion_runtime_track_test_stop(void);
+void motion_runtime_track_test_tick(void);
+uint8 motion_runtime_track_test_is_active(void);
+uint16 motion_runtime_track_test_remaining_ms(void);
+uint16 motion_runtime_track_test_sample_count(void);
+int32 motion_runtime_track_test_left_average_x10(void);
+int32 motion_runtime_track_test_right_average_x10(void);
+int32 motion_runtime_track_test_left_final_x10(void);
+int32 motion_runtime_track_test_right_final_x10(void);
+uint16 motion_runtime_track_test_left_pwm_final(void);
+uint16 motion_runtime_track_test_right_pwm_final(void);
+uint16 motion_runtime_track_test_match_x1000(void);
+TrackTestResult motion_runtime_track_test_take_event(void);
+const char *motion_runtime_track_test_result_text(void);
 
 void motion_runtime_set_run_unlocked(uint8 unlocked);
 uint8 motion_runtime_can_run(void);

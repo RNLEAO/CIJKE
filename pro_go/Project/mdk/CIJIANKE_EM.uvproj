@@ -638,11 +638,6 @@
               <FilePath>..\code\PID.c</FilePath>
             </File>
             <File>
-              <FileName>vofa.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\code\vofa.c</FilePath>
-            </File>
-            <File>
               <FileName>element.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\code\element.c</FilePath>

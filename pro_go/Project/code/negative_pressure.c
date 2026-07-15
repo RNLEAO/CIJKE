@@ -34,7 +34,8 @@ static void negative_pressure_output_off(void)
 static uint8 negative_pressure_motion_test_active(void)
 {
     return (uint8)(motion_runtime_encoder_test_is_active()
-        || motion_runtime_motor_test_is_active());
+        || motion_runtime_motor_test_is_active()
+        || motion_runtime_track_test_is_active());
 }
 
 static void negative_pressure_apply_output(void)
