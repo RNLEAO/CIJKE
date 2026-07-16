@@ -105,6 +105,7 @@ void DMA_UART4_IRQHandler(void) interrupt 18
 }
 
 #define LED P52
+#if !RACE_MINIMAL_BUILD
 #define SCOPE_CAPTURE_DIVIDER 4U
 
 volatile uint8 g_scope_arm_active = 0U;
@@ -115,6 +116,64 @@ volatile uint8 g_scope_snapshot_ready = 0U;
 volatile float xdata g_scope_snapshot[8];
 static uint8 scope_capture_ticks = 0U;
 static uint8 scope_test_phase = 0U;
+#endif
+
+/* T12 is an explicit half-circle test mode; T10 never enters this state machine. */
+#define TRACK_T12_APPROACH                 0U
+#define TRACK_T12_ENTRY_CONFIRM            1U
+#define TRACK_T12_HALF                     2U
+#define TRACK_T12_HANDOFF                  3U
+#define TRACK_T12_ARM_CONFIRM_TICKS        2U
+#define TRACK_T12_ENTRY_CONFIRM_TICKS      2U
+#define TRACK_T12_EXIT_CONFIRM_TICKS       2U
+#define TRACK_T12_ENTRY_TIMEOUT_TICKS    100U
+#define TRACK_T12_HALF_MIN_TICKS           40U
+#define TRACK_T12_HALF_ANGLE_MIN         170.0f
+#define TRACK_T12_HALF_ANGLE_EXIT         200.0f
+#define TRACK_T12_HALF_MAX_TICKS          230U
+#define TRACK_T12_HALF_RAMP_TICKS          15U
+#define TRACK_T12_HANDOFF_TICKS            10U
+#define TRACK_T12_HALF_ENTRY_RATIO          0.22f
+#define TRACK_T12_HALF_RATIO                0.255f
+#define TRACK_T12_EXIT_RATIO                0.13f
+#define TRACK_T12_LINE_FEEDBACK             0.30f
+#define TRACK_T12_TURN_FILTER_ALPHA          0.25f
+#define TRACK_T12_START_BALANCE_X1000      700U
+#define TRACK_T12_START_FALLBACK_X1000     550U
+
+static uint8 track_t12_state = TRACK_T12_APPROACH;
+static uint8 track_t12_arm_ticks = 0U;
+static uint8 track_t12_entry_ticks = 0U;
+static uint8 track_t12_exit_ticks = 0U;
+static uint8 track_t12_exit_trigger_pending = 0U;
+static uint16 track_t12_state_ticks = 0U;
+static uint16 track_t12_entry_timeout = 0U;
+static float track_t12_angle = 0.0f;
+static float track_t12_turn_filtered = 0.0f;
+
+volatile uint8 xdata g_track_t12_start_release_reason = 0U;
+volatile uint16 xdata g_track_t12_start_release_sample_count = 0U;
+volatile uint32 xdata g_track_t12_start_release_left_total = 0UL;
+volatile uint32 xdata g_track_t12_start_release_right_total = 0UL;
+volatile uint8 xdata g_track_t12_exit_trigger_mask = 0U;
+volatile uint16 xdata g_track_t12_exit_angle_x10 = 0U;
+volatile uint16 xdata g_track_t12_exit_half_ticks = 0U;
+volatile uint8 xdata g_track_t12_exit_norm_l = 0U;
+volatile uint8 xdata g_track_t12_exit_norm_lm = 0U;
+volatile uint8 xdata g_track_t12_exit_norm_rm = 0U;
+volatile uint8 xdata g_track_t12_exit_norm_r = 0U;
+volatile int16 xdata g_track_t12_exit_error_x1000 = 0;
+volatile uint16 xdata g_track_t12_exit_sum = 0U;
+volatile uint8 xdata g_track_t12_post_valid = 0U;
+volatile uint8 xdata g_track_t12_post_delay_ticks = 0U;
+volatile uint16 xdata g_track_t12_post_angle_x10 = 0U;
+volatile uint8 xdata g_track_t12_post_norm_l = 0U;
+volatile uint8 xdata g_track_t12_post_norm_lm = 0U;
+volatile uint8 xdata g_track_t12_post_norm_rm = 0U;
+volatile uint8 xdata g_track_t12_post_norm_r = 0U;
+volatile int16 xdata g_track_t12_post_error_x1000 = 0;
+volatile uint16 xdata g_track_t12_post_sum = 0U;
+
 void INT0_Isr() interrupt 0
 {
 	LED = 0;	// ASCII-cleaned legacy comment.
@@ -245,6 +304,422 @@ void reset_motion_pid_state(void)
 void reset_track_test_steering_state(void)
 {
 	track_turn_ratio = 0.0f;
+	track_t12_state = TRACK_T12_APPROACH;
+	track_t12_arm_ticks = 0U;
+	track_t12_entry_ticks = 0U;
+	track_t12_exit_ticks = 0U;
+	track_t12_exit_trigger_pending = 0U;
+	track_t12_state_ticks = 0U;
+	track_t12_entry_timeout = 0U;
+	track_t12_angle = 0.0f;
+	track_t12_turn_filtered = 0.0f;
+}
+
+void reset_track_test_exit_diagnostic(void)
+{
+	g_track_t12_start_release_reason = 0U;
+	g_track_t12_start_release_sample_count = 0U;
+	g_track_t12_start_release_left_total = 0UL;
+	g_track_t12_start_release_right_total = 0UL;
+	g_track_t12_exit_trigger_mask = 0U;
+	g_track_t12_exit_angle_x10 = 0U;
+	g_track_t12_exit_half_ticks = 0U;
+	g_track_t12_exit_norm_l = 0U;
+	g_track_t12_exit_norm_lm = 0U;
+	g_track_t12_exit_norm_rm = 0U;
+	g_track_t12_exit_norm_r = 0U;
+	g_track_t12_exit_error_x1000 = 0;
+	g_track_t12_exit_sum = 0U;
+	g_track_t12_post_valid = 0U;
+	g_track_t12_post_delay_ticks = 0U;
+	g_track_t12_post_angle_x10 = 0U;
+	g_track_t12_post_norm_l = 0U;
+	g_track_t12_post_norm_lm = 0U;
+	g_track_t12_post_norm_rm = 0U;
+	g_track_t12_post_norm_r = 0U;
+	g_track_t12_post_error_x1000 = 0;
+	g_track_t12_post_sum = 0U;
+}
+
+static int8 track_t12_candidate_direction(void)
+{
+	uint16 sum = inductance4_get_line_sum();
+	uint16 left_pair = (uint16)g_inductance4[INDUCTANCE4_L].normalized
+		+ (uint16)g_inductance4[INDUCTANCE4_LM].normalized;
+	uint16 right_pair = (uint16)g_inductance4[INDUCTANCE4_RM].normalized
+		+ (uint16)g_inductance4[INDUCTANCE4_R].normalized;
+
+	/* E0/E1 is a mirrored three-sensor cluster; the far outer sensor may be low. */
+	if (sum < 330U)
+	{
+		return 0;
+	}
+	if (g_inductance4[INDUCTANCE4_LM].normalized >= 80
+		&& g_inductance4[INDUCTANCE4_RM].normalized >= 95
+		&& g_inductance4[INDUCTANCE4_R].normalized >= 100
+		&& right_pair >= (uint16)(left_pair + 35U)
+		&& error <= -0.20f)
+	{
+		return -1;
+	}
+	if (g_inductance4[INDUCTANCE4_RM].normalized >= 80
+		&& g_inductance4[INDUCTANCE4_LM].normalized >= 95
+		&& g_inductance4[INDUCTANCE4_L].normalized >= 100
+		&& left_pair >= (uint16)(right_pair + 35U)
+		&& error >= 0.20f)
+	{
+		return 1;
+	}
+	return 0;
+}
+
+static uint8 track_t12_entry_matches(int8 direction)
+{
+	uint16 sum = inductance4_get_line_sum();
+	uint16 left_pair = (uint16)g_inductance4[INDUCTANCE4_L].normalized
+		+ (uint16)g_inductance4[INDUCTANCE4_LM].normalized;
+	uint16 right_pair = (uint16)g_inductance4[INDUCTANCE4_RM].normalized
+		+ (uint16)g_inductance4[INDUCTANCE4_R].normalized;
+
+	if (sum < 300U)
+	{
+		return 0U;
+	}
+	if (direction < 0)
+	{
+		return g_inductance4[INDUCTANCE4_L].normalized <= 85
+			&& g_inductance4[INDUCTANCE4_LM].normalized >= 50
+			&& g_inductance4[INDUCTANCE4_RM].normalized >= 85
+			&& g_inductance4[INDUCTANCE4_R].normalized >= 85
+			&& right_pair >= (uint16)(left_pair + 30U)
+			&& error <= -0.28f;
+	}
+	return g_inductance4[INDUCTANCE4_R].normalized <= 85
+		&& g_inductance4[INDUCTANCE4_RM].normalized >= 50
+		&& g_inductance4[INDUCTANCE4_L].normalized >= 85
+		&& g_inductance4[INDUCTANCE4_LM].normalized >= 85
+		&& left_pair >= (uint16)(right_pair + 30U)
+		&& error >= 0.28f;
+}
+
+static uint8 track_t12_exit_matches(int8 direction)
+{
+	uint16 sum = inductance4_get_line_sum();
+	uint16 left_pair = (uint16)g_inductance4[INDUCTANCE4_L].normalized
+		+ (uint16)g_inductance4[INDUCTANCE4_LM].normalized;
+	uint16 right_pair = (uint16)g_inductance4[INDUCTANCE4_RM].normalized
+		+ (uint16)g_inductance4[INDUCTANCE4_R].normalized;
+
+	/* A180 is brief in motion; use a wider dynamic window than the static sample. */
+	if (sum < 60U || sum > 380U)
+	{
+		return 0U;
+	}
+	if (direction < 0)
+	{
+		return g_inductance4[INDUCTANCE4_RM].normalized <= 90
+			&& g_inductance4[INDUCTANCE4_R].normalized <= 65
+			&& left_pair >= (uint16)(right_pair + 25U)
+			&& error >= 0.35f;
+	}
+	return g_inductance4[INDUCTANCE4_L].normalized <= 90
+		&& g_inductance4[INDUCTANCE4_LM].normalized <= 65
+		&& right_pair >= (uint16)(left_pair + 25U)
+		&& error <= -0.35f;
+}
+
+static uint8 track_t12_exit_trigger_now(void)
+{
+	uint8 trigger_mask = 0U;
+
+	if (track_t12_angle >= TRACK_T12_HALF_ANGLE_EXIT)
+	{
+		trigger_mask |= TRACK_T12_EXIT_TRIGGER_ANGLE;
+	}
+	if (track_t12_state_ticks >= TRACK_T12_HALF_MAX_TICKS)
+	{
+		trigger_mask |= TRACK_T12_EXIT_TRIGGER_TIME;
+	}
+	if (track_t12_angle >= TRACK_T12_HALF_ANGLE_MIN
+		&& track_t12_exit_matches(g_track_test_t12_direction))
+	{
+		trigger_mask |= TRACK_T12_EXIT_TRIGGER_SENSOR;
+	}
+	return trigger_mask;
+}
+
+static void track_t12_capture_exit_diagnostic(uint8 post_handoff)
+{
+	uint16 angle_x10 = (uint16)(track_t12_angle * 10.0f);
+	int16 error_x1000 = (int16)(error * 1000.0f);
+	uint16 sum = inductance4_get_line_sum();
+
+	if (post_handoff)
+	{
+		g_track_t12_post_delay_ticks = (uint8)track_t12_state_ticks;
+		g_track_t12_post_angle_x10 = angle_x10;
+		g_track_t12_post_norm_l = (uint8)g_inductance4[INDUCTANCE4_L].normalized;
+		g_track_t12_post_norm_lm = (uint8)g_inductance4[INDUCTANCE4_LM].normalized;
+		g_track_t12_post_norm_rm = (uint8)g_inductance4[INDUCTANCE4_RM].normalized;
+		g_track_t12_post_norm_r = (uint8)g_inductance4[INDUCTANCE4_R].normalized;
+		g_track_t12_post_error_x1000 = error_x1000;
+		g_track_t12_post_sum = sum;
+		g_track_t12_post_valid = 1U;
+		return;
+	}
+
+	g_track_t12_exit_angle_x10 = angle_x10;
+	g_track_t12_exit_half_ticks = track_t12_state_ticks;
+	g_track_t12_exit_norm_l = (uint8)g_inductance4[INDUCTANCE4_L].normalized;
+	g_track_t12_exit_norm_lm = (uint8)g_inductance4[INDUCTANCE4_LM].normalized;
+	g_track_t12_exit_norm_rm = (uint8)g_inductance4[INDUCTANCE4_RM].normalized;
+	g_track_t12_exit_norm_r = (uint8)g_inductance4[INDUCTANCE4_R].normalized;
+	g_track_t12_exit_error_x1000 = error_x1000;
+	g_track_t12_exit_sum = sum;
+}
+
+static uint8 track_t12_start_ready(void)
+{
+	uint32 smaller_total;
+	uint32 larger_total;
+	uint8 release_reason = 0U;
+
+	if (g_track_t12_start_release_reason != 0U)
+	{
+		return 1U;
+	}
+	if (g_track_test_start_left_total < TRACK_TEST_T12_START_SYNC_RELEASE_COUNT
+		|| g_track_test_start_right_total < TRACK_TEST_T12_START_SYNC_RELEASE_COUNT)
+	{
+		return 0U;
+	}
+
+	smaller_total = g_track_test_start_left_total < g_track_test_start_right_total
+		? g_track_test_start_left_total : g_track_test_start_right_total;
+	larger_total = g_track_test_start_left_total > g_track_test_start_right_total
+		? g_track_test_start_left_total : g_track_test_start_right_total;
+	if (smaller_total * 1000UL
+		>= larger_total * TRACK_T12_START_BALANCE_X1000)
+	{
+		release_reason = TRACK_T12_START_RELEASE_BALANCED;
+	}
+	else if (g_track_test_start_sample_count
+			 >= TRACK_TEST_T12_START_MONITOR_SAMPLES
+		&& smaller_total * 1000UL
+			 >= larger_total * TRACK_T12_START_FALLBACK_X1000)
+	{
+		release_reason = TRACK_T12_START_RELEASE_FALLBACK;
+	}
+	if (release_reason == 0U)
+	{
+		return 0U;
+	}
+	if (g_track_t12_start_release_reason == 0U)
+	{
+		g_track_t12_start_release_sample_count = g_track_test_start_sample_count;
+		g_track_t12_start_release_left_total = g_track_test_start_left_total;
+		g_track_t12_start_release_right_total = g_track_test_start_right_total;
+		g_track_t12_start_release_reason = release_reason;
+	}
+	return 1U;
+}
+
+static float track_t10_test_turn_ratio(float track_error)
+{
+	uint16 sum = inductance4_get_line_sum();
+
+	/* Keep the Z07 straight heading when Z09 raises only the outer-field sum. */
+	if (sum >= 300U
+		&& g_inductance4[INDUCTANCE4_LM].normalized < 80
+		&& g_inductance4[INDUCTANCE4_RM].normalized < 80
+		&& fabs(track_error) >= 0.20f)
+	{
+		return 0.0f;
+	}
+	if (fabs(track_error) <= TRACK_TEST_TURN_DEADBAND)
+	{
+		return 0.0f;
+	}
+	return limit_function(
+		track_error * TRACK_TEST_TURN_GAIN,
+		-TRACK_TEST_TURN_RATIO_LIMIT,
+		TRACK_TEST_TURN_RATIO_LIMIT);
+}
+
+static void track_t12_update(void)
+{
+	if (track_t12_state_ticks < 65535U)
+	{
+		track_t12_state_ticks++;
+	}
+
+	switch (track_t12_state)
+	{
+		case TRACK_T12_APPROACH:
+		{
+			int8 candidate = track_t12_candidate_direction();
+			if (candidate != 0)
+			{
+				if (g_track_test_t12_direction == 0
+					|| g_track_test_t12_direction == candidate)
+				{
+					g_track_test_t12_direction = candidate;
+					if (track_t12_arm_ticks < TRACK_T12_ARM_CONFIRM_TICKS)
+					{
+						track_t12_arm_ticks++;
+					}
+					if (track_t12_arm_ticks >= TRACK_T12_ARM_CONFIRM_TICKS)
+					{
+						track_t12_state = TRACK_T12_ENTRY_CONFIRM;
+						track_t12_state_ticks = 0U;
+						track_t12_entry_timeout = TRACK_T12_ENTRY_TIMEOUT_TICKS;
+						track_t12_entry_ticks = 0U;
+					}
+				}
+				else
+				{
+					track_t12_arm_ticks = 0U;
+					g_track_test_t12_direction = 0;
+				}
+			}
+			else
+			{
+				track_t12_arm_ticks = 0U;
+				g_track_test_t12_direction = 0;
+			}
+			break;
+		}
+
+		case TRACK_T12_ENTRY_CONFIRM:
+			if (track_t12_entry_timeout > 0U)
+			{
+				track_t12_entry_timeout--;
+			}
+			if (track_t12_entry_matches(g_track_test_t12_direction))
+			{
+				if (track_t12_entry_ticks < TRACK_T12_ENTRY_CONFIRM_TICKS)
+				{
+					track_t12_entry_ticks++;
+				}
+				if (track_t12_entry_ticks >= TRACK_T12_ENTRY_CONFIRM_TICKS)
+				{
+					track_t12_state = TRACK_T12_HALF;
+					track_t12_state_ticks = 0U;
+					track_t12_exit_ticks = 0U;
+					track_t12_angle = 0.0f;
+					track_t12_turn_filtered =
+						(float)g_track_test_t12_direction
+						* TRACK_T12_HALF_ENTRY_RATIO;
+					g_track_test_t12_half_active = 1U;
+				}
+			}
+			else
+			{
+				track_t12_entry_ticks = 0U;
+			}
+			if (track_t12_state == TRACK_T12_ENTRY_CONFIRM
+				&& track_t12_entry_timeout == 0U)
+			{
+				track_t12_state = TRACK_T12_APPROACH;
+				track_t12_arm_ticks = 0U;
+				track_t12_entry_ticks = 0U;
+				g_track_test_t12_direction = 0;
+			}
+			break;
+
+		case TRACK_T12_HALF:
+		{
+			uint8 exit_trigger_mask = 0U;
+
+			track_t12_angle += fabs(g_imu_turn_rate_dps) * 0.01f;
+			if (track_t12_state_ticks >= TRACK_T12_HALF_MIN_TICKS)
+			{
+				exit_trigger_mask = track_t12_exit_trigger_now();
+			}
+			if (exit_trigger_mask != 0U)
+			{
+				track_t12_exit_trigger_pending |= exit_trigger_mask;
+				if (track_t12_exit_ticks < TRACK_T12_EXIT_CONFIRM_TICKS)
+				{
+					track_t12_exit_ticks++;
+				}
+				if (track_t12_exit_ticks >= TRACK_T12_EXIT_CONFIRM_TICKS)
+				{
+					g_track_t12_exit_trigger_mask = track_t12_exit_trigger_pending;
+					track_t12_capture_exit_diagnostic(0U);
+					track_t12_state = TRACK_T12_HANDOFF;
+					track_t12_state_ticks = 0U;
+				}
+			}
+			else
+			{
+				track_t12_exit_ticks = 0U;
+				track_t12_exit_trigger_pending = 0U;
+			}
+			break;
+		}
+
+		case TRACK_T12_HANDOFF:
+			if (!g_track_t12_post_valid)
+			{
+				track_t12_angle += fabs(g_imu_turn_rate_dps) * 0.01f;
+				if (track_t12_state_ticks >= TRACK_T12_HANDOFF_TICKS)
+				{
+					track_t12_capture_exit_diagnostic(1U);
+				}
+			}
+			break;
+		default:
+			track_t12_state = TRACK_T12_APPROACH;
+			break;
+	}
+}
+
+static float track_t12_turn_ratio(float track_error)
+{
+	float half_ratio;
+	float handoff_ratio;
+	float requested_ratio;
+
+	if (!track_t12_start_ready())
+	{
+		/* Keep the Z09 approach tangent until the T12 release gate is ready. */
+		track_t12_turn_filtered = 0.0f;
+		return 0.0f;
+	}
+
+	if (track_t12_state == TRACK_T12_HALF)
+	{
+		half_ratio = TRACK_T12_HALF_ENTRY_RATIO;
+		if (track_t12_state_ticks < TRACK_T12_HALF_RAMP_TICKS)
+		{
+			half_ratio += (TRACK_T12_HALF_RATIO - TRACK_T12_HALF_ENTRY_RATIO)
+				* (float)track_t12_state_ticks / (float)TRACK_T12_HALF_RAMP_TICKS;
+		}
+		else
+		{
+			half_ratio = TRACK_T12_HALF_RATIO;
+		}
+		requested_ratio = (float)g_track_test_t12_direction * half_ratio
+			+ TRACK_T12_LINE_FEEDBACK * track_t10_test_turn_ratio(track_error);
+	}
+	else if (track_t12_state == TRACK_T12_HANDOFF
+		&& track_t12_state_ticks < TRACK_T12_HANDOFF_TICKS)
+	{
+		handoff_ratio = (float)(TRACK_T12_HANDOFF_TICKS - track_t12_state_ticks)
+			/ (float)TRACK_T12_HANDOFF_TICKS;
+		requested_ratio = -(float)g_track_test_t12_direction * TRACK_T12_EXIT_RATIO
+			* handoff_ratio + track_t10_test_turn_ratio(track_error)
+			* (1.0f - handoff_ratio);
+	}
+	else
+	{
+		requested_ratio = track_t10_test_turn_ratio(track_error);
+	}
+
+	track_t12_turn_filtered += TRACK_T12_TURN_FILTER_ALPHA
+		* (requested_ratio - track_t12_turn_filtered);
+	return track_t12_turn_filtered;
 }
 
 static uint8 line_guard_required(void)
@@ -290,15 +765,17 @@ void TM1_Isr() interrupt 3
 			float left_pid_delta;
 			float right_pid_delta;
 #if TRACK_TEST_START_ASSIST_ENABLED
-			float track_start_sync_pwm;
-			int32 track_start_distance_error;
+			uint16 track_start_sample_limit;
+			uint32 track_start_release_count;
 #endif
 
 			TIM1_CLEAR_FLAG;
+			#if !RACE_MINIMAL_BUILD
 			if (g_scope_arm_active && g_scope_arm_ticks > 0U)
 			{
 				g_scope_arm_ticks--;
 			}
+			#endif
 
 //			angle_project(100);
 		
@@ -386,16 +863,13 @@ void TM1_Isr() interrupt 3
 				track_line_speed_scale = 1.0f;
 				track_base_target = L_pid.Target_base;
 #if TRACK_TEST_STEERING_ENABLED
-				if (fabs(error) <= TRACK_TEST_TURN_DEADBAND)
+				if (g_track_test_mode == TRACK_TEST_MODE_T12)
 				{
-					track_turn_ratio = 0.0f;
+					track_turn_ratio = track_t12_turn_ratio(error);
 				}
 				else
 				{
-					track_turn_ratio = limit_function(
-						error * TRACK_TEST_TURN_GAIN,
-						-TRACK_TEST_TURN_RATIO_LIMIT,
-						TRACK_TEST_TURN_RATIO_LIMIT);
+					track_turn_ratio = track_t10_test_turn_ratio(error);
 				}
 #else
 				track_turn_ratio = 0.0f;
@@ -480,30 +954,27 @@ void TM1_Isr() interrupt 3
 		current_r_pwm_duty=current_r_pwm_inc;  //current_r_pwm_inc
 #if TRACK_TEST_START_ASSIST_ENABLED
 		if (motion_runtime_track_test_is_active()
-			&& g_track_test_start_sample_count < TRACK_TEST_START_SYNC_SAMPLES)
+			&& L_pid.Target_base > 0.0f)
 		{
-			track_start_distance_error =
-				(int32)g_track_test_start_right_total
-				- (int32)g_track_test_start_left_total;
-			track_start_sync_pwm = limit_function(
-				(float)track_start_distance_error * TRACK_TEST_START_SYNC_GAIN,
-				-TRACK_TEST_START_SYNC_LIMIT,
-				TRACK_TEST_START_SYNC_LIMIT);
-			current_l_pwm_duty = limit_function(
-				current_l_pwm_duty + track_start_sync_pwm,
-				0.0f,
-				MOTOR_PWM_LIMIT_VALUE);
-			current_r_pwm_duty = limit_function(
-				current_r_pwm_duty - track_start_sync_pwm,
-				0.0f,
-				MOTOR_PWM_LIMIT_VALUE);
-			if ((g_track_test_start_sample_count + 1U)
-				>= TRACK_TEST_START_SYNC_SAMPLES)
+			track_start_sample_limit = g_track_test_mode == TRACK_TEST_MODE_T12
+				? TRACK_TEST_T12_START_MONITOR_SAMPLES
+				: TRACK_TEST_START_SYNC_SAMPLES;
+			track_start_release_count = g_track_test_mode == TRACK_TEST_MODE_T12
+				? TRACK_TEST_T12_START_SYNC_RELEASE_COUNT
+				: TRACK_TEST_T10_START_RELEASE_COUNT;
+			if (g_track_test_start_sample_count < track_start_sample_limit)
 			{
-				current_l_pwm_inc = current_l_pwm_duty;
-				current_r_pwm_inc = current_r_pwm_duty;
-				current_l_pwm_inc_last = current_l_pwm_duty;
-				current_r_pwm_inc_last = current_r_pwm_duty;
+				/* Each wheel gets the same slew-limited breakaway floor independently. */
+				if (g_track_test_start_left_total < track_start_release_count
+					&& current_l_pwm_duty < TRACK_TEST_START_BREAKAWAY_PWM)
+				{
+					current_l_pwm_duty = TRACK_TEST_START_BREAKAWAY_PWM;
+				}
+				if (g_track_test_start_right_total < track_start_release_count
+					&& current_r_pwm_duty < TRACK_TEST_START_BREAKAWAY_PWM)
+				{
+					current_r_pwm_duty = TRACK_TEST_START_BREAKAWAY_PWM;
+				}
 			}
 		}
 #endif
@@ -564,10 +1035,12 @@ void TM1_Isr() interrupt 3
 	  /********************* Run-state protection ********************/
 
 				//protect
+		#if !RACE_MINIMAL_BUILD
 		if (!motion_runtime_track_test_is_active() && !g_scope_arm_active)
 		{
 			key_scan_cycle_pwm_state();
 		}
+		#endif
 
 		if(pwm_state==2){
 		mot_inc=0;
@@ -577,6 +1050,7 @@ void TM1_Isr() interrupt 3
 		
 	 /********************* Motor PWM output ********************/
 		out_pwm();
+		#if !RACE_MINIMAL_BUILD
 		if (g_scope_capture_enabled
 			&& (motion_runtime_track_test_is_active() || g_scope_test_mode))
 		{
@@ -617,6 +1091,7 @@ void TM1_Isr() interrupt 3
 			scope_capture_ticks = 0U;
 			scope_test_phase = 0U;
 		}
+		#endif
 		motion_runtime_track_test_tick();
 	
 }
@@ -652,6 +1127,12 @@ void TM4_Isr() interrupt 20
 		{
 			error = inductance4_calculate_error();
 			error = element4_process(error);
+			if (motion_runtime_track_test_is_active()
+				&& g_track_test_mode == TRACK_TEST_MODE_T12
+				&& track_t12_start_ready())
+			{
+				track_t12_update();
+			}
 
 			if (motion_runtime_track_test_is_active())
 			{

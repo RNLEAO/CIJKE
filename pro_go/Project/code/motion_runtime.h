@@ -3,27 +3,34 @@
 
 #include "zf_common_typedef.h"
 
+#define RACE_MINIMAL_BUILD       1U
 #define MOTOR_PWM_LIMIT_VALUE   2000.0f
 #define MOTOR_TEST_PWM_VALUE    2000U
 #define MOTOR_TEST_BOTH_PWM_VALUE 2000U
 #define MOTOR_TEST_DURATION_MS  1000U
 #define MOTOR_TEST_PRECHECK_MS  50U
 #define ENCODER_TEST_DURATION_MS 15000U
-#define TRACK_TEST_TARGET_VALUE  180U
-#define TRACK_TEST_DURATION_MS  2500U
-#define TRACK_TEST_LINE_LOST_MS   50U
+#define TRACK_TEST_T10_TARGET_VALUE 215U
+#define TRACK_TEST_T12_TARGET_VALUE 120U
+#define TRACK_TEST_TARGET_VALUE TRACK_TEST_T10_TARGET_VALUE
+#define TRACK_TEST_DURATION_MS  3000U
+#define TRACK_TEST_LINE_LOST_MS   80U
 #define TRACK_TEST_STARTUP_GRACE_MS 500U
-#define TRACK_TEST_START_ASSIST_ENABLED 0U
+#define TRACK_TEST_START_ASSIST_ENABLED 1U
 #define TRACK_TEST_STEERING_ENABLED 1U
 #define TRACK_TEST_TURN_GAIN 0.15f
 #define TRACK_TEST_TURN_DEADBAND 0.02f
 #define TRACK_TEST_TURN_RATIO_LIMIT 0.10f
+#define TRACK_TEST_MODE_T10 0U
+#define TRACK_TEST_MODE_T12 1U
 #if TRACK_TEST_START_ASSIST_ENABLED
 #define TRACK_TEST_TARGET_RAMP_MS 500U
 #define TRACK_TEST_DECEL_RAMP_MS 500U
 #define TRACK_TEST_START_SYNC_SAMPLES 100U
-#define TRACK_TEST_START_SYNC_GAIN 0.35f
-#define TRACK_TEST_START_SYNC_LIMIT 350.0f
+#define TRACK_TEST_T12_START_MONITOR_SAMPLES 140U
+#define TRACK_TEST_START_BREAKAWAY_PWM 600.0f
+#define TRACK_TEST_T10_START_RELEASE_COUNT 100U
+#define TRACK_TEST_T12_START_SYNC_RELEASE_COUNT 300U
 #endif
 
 typedef enum
@@ -128,6 +135,9 @@ extern volatile uint8 g_encoder_test_result;
 extern volatile uint16 g_encoder_test_ticks_remaining;
 
 extern volatile uint8 g_track_test_result;
+extern volatile uint8 g_track_test_mode;
+extern volatile int8 g_track_test_t12_direction;
+extern volatile uint8 g_track_test_t12_half_active;
 extern volatile uint16 g_track_test_ticks_remaining;
 extern volatile uint16 g_track_test_start_sample_count;
 extern volatile uint32 g_track_test_start_left_total;
@@ -202,6 +212,7 @@ const char *motion_runtime_encoder_test_side_text(void);
 const char *motion_runtime_encoder_test_result_text(void);
 
 uint8 motion_runtime_track_test_start(void);
+uint8 motion_runtime_track_test_start_mode(uint8 mode);
 uint8 motion_runtime_track_test_stop(void);
 void motion_runtime_track_test_tick(void);
 uint8 motion_runtime_track_test_is_active(void);

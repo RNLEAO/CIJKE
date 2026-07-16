@@ -37,9 +37,7 @@
 #define TRACK_TEST_STARTUP_GRACE_TICKS  (TRACK_TEST_STARTUP_GRACE_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
 #if TRACK_TEST_START_ASSIST_ENABLED
 #define TRACK_TEST_TARGET_RAMP_TICKS    (TRACK_TEST_TARGET_RAMP_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
-#define TRACK_TEST_TARGET_RAMP_STEP     ((float)TRACK_TEST_TARGET_VALUE / (float)TRACK_TEST_TARGET_RAMP_TICKS)
 #define TRACK_TEST_DECEL_RAMP_TICKS     (TRACK_TEST_DECEL_RAMP_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
-#define TRACK_TEST_DECEL_RAMP_STEP      ((float)TRACK_TEST_TARGET_VALUE / (float)TRACK_TEST_DECEL_RAMP_TICKS)
 #endif
 #define TRACK_TEST_SPEED_KP                 5.9f
 #define TRACK_TEST_SPEED_KI                 0.50f
@@ -125,6 +123,9 @@ static volatile uint32 encoder_test_right_total = 0U;
 static volatile uint16 encoder_test_left_peak = 0U;
 static volatile uint16 encoder_test_right_peak = 0U;
 volatile uint8 g_track_test_result = TRACK_TEST_RESULT_IDLE;
+volatile uint8 g_track_test_mode = TRACK_TEST_MODE_T10;
+volatile int8 g_track_test_t12_direction = 0;
+volatile uint8 g_track_test_t12_half_active = 0U;
 volatile uint16 g_track_test_ticks_remaining = 0U;
 volatile uint16 g_track_test_start_sample_count = 0U;
 volatile uint32 g_track_test_start_left_total = 0U;
@@ -142,6 +143,9 @@ static uint16 track_test_left_pwm_final = 0U;
 static uint16 track_test_right_pwm_final = 0U;
 #if TRACK_TEST_START_ASSIST_ENABLED
 static float track_test_ramped_target = 0.0f;
+static float track_test_target_value = 0.0f;
+static float track_test_ramp_step = 0.0f;
+static float track_test_decel_step = 0.0f;
 #endif
 static uint8 track_test_pid_saved = 0U;
 static float track_test_saved_left_kp = 0.0f;
@@ -1359,6 +1363,13 @@ uint8 motion_runtime_motor_test_both_passed(void)
 
 uint8 motion_runtime_track_test_start(void)
 {
+    return motion_runtime_track_test_start_mode(TRACK_TEST_MODE_T10);
+}
+
+uint8 motion_runtime_track_test_start_mode(uint8 mode)
+{
+    uint16 target_value;
+
     if (!motor_test_both_passed
         || track_test_active
         || motor_test_active
@@ -1374,6 +1385,10 @@ uint8 motion_runtime_track_test_start(void)
         || negative_pressure_armed
         || negative_pressure_state != NEGATIVE_PRESSURE_STATE_OFF
         || negative_pressure_real_output_percent != 0U)
+    {
+        return 0U;
+    }
+    if (mode != TRACK_TEST_MODE_T10 && mode != TRACK_TEST_MODE_T12)
     {
         return 0U;
     }
@@ -1401,10 +1416,23 @@ uint8 motion_runtime_track_test_start(void)
     R_pid.kd = 0.0f;
 
     reset_motion_pid_state();
+    g_track_test_t12_direction = 0;
+    g_track_test_t12_half_active = 0U;
+    reset_track_test_exit_diagnostic();
     reset_track_test_steering_state();
-    change_speed_Target_base((int)TRACK_TEST_TARGET_VALUE);
+    target_value = mode == TRACK_TEST_MODE_T12
+        ? TRACK_TEST_T12_TARGET_VALUE
+        : TRACK_TEST_T10_TARGET_VALUE;
 #if TRACK_TEST_START_ASSIST_ENABLED
+    change_speed_Target_base(0);
     track_test_ramped_target = 0.0f;
+    track_test_target_value = (float)target_value;
+    track_test_ramp_step = track_test_target_value
+        / (float)TRACK_TEST_TARGET_RAMP_TICKS;
+    track_test_decel_step = track_test_target_value
+        / (float)TRACK_TEST_DECEL_RAMP_TICKS;
+#else
+    change_speed_Target_base((int)target_value);
 #endif
     current_l_pwm_inc = 0.0f;
     current_r_pwm_inc = 0.0f;
@@ -1430,6 +1458,7 @@ uint8 motion_runtime_track_test_start(void)
     g_track_test_start_left_total = 0U;
     g_track_test_start_right_total = 0U;
     track_test_event = TRACK_TEST_RESULT_IDLE;
+    g_track_test_mode = mode;
 
     g_track_test_result = TRACK_TEST_RESULT_RUNNING;
     g_track_test_ticks_remaining = TRACK_TEST_DURATION_TICKS;
@@ -1460,6 +1489,9 @@ void motion_runtime_track_test_tick(void)
     float right_speed;
     float left_pwm;
     float right_pwm;
+#if TRACK_TEST_START_ASSIST_ENABLED
+    uint16 start_monitor_samples;
+#endif
 
     if (!track_test_active)
     {
@@ -1531,23 +1563,30 @@ void motion_runtime_track_test_tick(void)
     }
 
 #if TRACK_TEST_START_ASSIST_ENABLED
-    if (g_track_test_start_sample_count < TRACK_TEST_TARGET_RAMP_TICKS)
+    start_monitor_samples = g_track_test_mode == TRACK_TEST_MODE_T12
+        ? TRACK_TEST_T12_START_MONITOR_SAMPLES
+        : TRACK_TEST_START_SYNC_SAMPLES;
+    if (g_track_test_start_sample_count < start_monitor_samples)
     {
         g_track_test_start_left_total += (uint32)g_encoder_left_raw;
         g_track_test_start_right_total += (uint32)g_encoder_right_raw;
         g_track_test_start_sample_count++;
+    }
 
-        track_test_ramped_target += TRACK_TEST_TARGET_RAMP_STEP;
+    if (track_test_ramped_target < track_test_target_value
+        && g_track_test_start_sample_count <= TRACK_TEST_TARGET_RAMP_TICKS)
+    {
+        track_test_ramped_target += track_test_ramp_step;
         if (g_track_test_start_sample_count >= TRACK_TEST_TARGET_RAMP_TICKS
-            || track_test_ramped_target > (float)TRACK_TEST_TARGET_VALUE)
+            || track_test_ramped_target > track_test_target_value)
         {
-            track_test_ramped_target = (float)TRACK_TEST_TARGET_VALUE;
+            track_test_ramped_target = track_test_target_value;
         }
         change_speed_Target_base((int)track_test_ramped_target);
     }
-    else if (g_track_test_ticks_remaining <= TRACK_TEST_DECEL_RAMP_TICKS)
+    if (g_track_test_ticks_remaining <= TRACK_TEST_DECEL_RAMP_TICKS)
     {
-        track_test_ramped_target -= TRACK_TEST_DECEL_RAMP_STEP;
+        track_test_ramped_target -= track_test_decel_step;
         if (track_test_ramped_target < 0.0f)
         {
             track_test_ramped_target = 0.0f;

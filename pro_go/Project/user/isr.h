@@ -44,6 +44,37 @@ unsigned char motion_line_wait_is_active(void);
 unsigned char motion_direction_guard_mask(void);
 void reset_motion_pid_state(void);
 void reset_track_test_steering_state(void);
+void reset_track_test_exit_diagnostic(void);
+
+#define TRACK_T12_EXIT_TRIGGER_SENSOR 0x01U
+#define TRACK_T12_EXIT_TRIGGER_ANGLE  0x02U
+#define TRACK_T12_EXIT_TRIGGER_TIME   0x04U
+
+#define TRACK_T12_START_RELEASE_BALANCED 0x01U
+#define TRACK_T12_START_RELEASE_FALLBACK 0x02U
+
+extern volatile unsigned char xdata g_track_t12_start_release_reason;
+extern volatile unsigned int xdata g_track_t12_start_release_sample_count;
+extern volatile unsigned long xdata g_track_t12_start_release_left_total;
+extern volatile unsigned long xdata g_track_t12_start_release_right_total;
+extern volatile unsigned char xdata g_track_t12_exit_trigger_mask;
+extern volatile unsigned int xdata g_track_t12_exit_angle_x10;
+extern volatile unsigned int xdata g_track_t12_exit_half_ticks;
+extern volatile unsigned char xdata g_track_t12_exit_norm_l;
+extern volatile unsigned char xdata g_track_t12_exit_norm_lm;
+extern volatile unsigned char xdata g_track_t12_exit_norm_rm;
+extern volatile unsigned char xdata g_track_t12_exit_norm_r;
+extern volatile signed int xdata g_track_t12_exit_error_x1000;
+extern volatile unsigned int xdata g_track_t12_exit_sum;
+extern volatile unsigned char xdata g_track_t12_post_valid;
+extern volatile unsigned char xdata g_track_t12_post_delay_ticks;
+extern volatile unsigned int xdata g_track_t12_post_angle_x10;
+extern volatile unsigned char xdata g_track_t12_post_norm_l;
+extern volatile unsigned char xdata g_track_t12_post_norm_lm;
+extern volatile unsigned char xdata g_track_t12_post_norm_rm;
+extern volatile unsigned char xdata g_track_t12_post_norm_r;
+extern volatile signed int xdata g_track_t12_post_error_x1000;
+extern volatile unsigned int xdata g_track_t12_post_sum;
 
 
 extern float mid_dynamic_weight;

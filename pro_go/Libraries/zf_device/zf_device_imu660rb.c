@@ -58,7 +58,6 @@
 #include "zf_driver_delay.h"
 #include "zf_driver_spi.h"
 #include "zf_driver_gpio.h"
-#include "zf_driver_soft_iic.h"
 #include "zf_device_config.h"
 #include "zf_device_imu660rb.h"
 
@@ -280,15 +279,179 @@ int16 imu660rb_acc_x = 0, imu660rb_acc_y = 0, imu660rb_acc_z = 0;               
 	
 
 #elif (IMU660RB_USE_INTERFACE==SOFT_IIC)
-	
-	static soft_iic_info_struct imu660rb_iic_struct;
 
-	#define imu660rb_write_register(reg, dat)        (soft_iic_write_8bit_register (&imu660rb_iic_struct, (reg), (dat)))
-	#define imu660rb_write_registers(reg, dat, len)  (soft_iic_write_8bit_registers(&imu660rb_iic_struct, (reg), (dat), (len)))
-	#define imu660rb_read_register(reg)               (soft_iic_read_8bit_register  (&imu660rb_iic_struct, (reg)))
-	#define imu660rb_read_registers(reg, dat, len)   (soft_iic_read_8bit_registers (&imu660rb_iic_struct, (reg), (dat), (len)))
+	static uint8 imu660rb_iic_address = IMU660RB_DEV_ADDR;
+
+	static void imu660rb_iic_start (void)
+	{
+		gpio_high(IMU660RB_SCL_PIN);
+		gpio_high(IMU660RB_SDA_PIN);
+		gpio_low(IMU660RB_SDA_PIN);
+		gpio_low(IMU660RB_SCL_PIN);
+	}
+
+	static void imu660rb_iic_stop (void)
+	{
+		gpio_low(IMU660RB_SDA_PIN);
+		gpio_high(IMU660RB_SCL_PIN);
+		gpio_high(IMU660RB_SDA_PIN);
+	}
+
+	static uint8 imu660rb_iic_write_byte (uint8 dat)
+	{
+		uint8 mask = 0x80U;
+		uint8 acknowledged;
+
+		while (mask)
+		{
+			if (dat & mask)
+			{
+				gpio_high(IMU660RB_SDA_PIN);
+			}
+			else
+			{
+				gpio_low(IMU660RB_SDA_PIN);
+			}
+			gpio_high(IMU660RB_SCL_PIN);
+			gpio_low(IMU660RB_SCL_PIN);
+			mask >>= 1;
+		}
+
+		gpio_high(IMU660RB_SDA_PIN);
+		gpio_high(IMU660RB_SCL_PIN);
+		acknowledged = gpio_get_level(IMU660RB_SDA_PIN) == 0U;
+		gpio_low(IMU660RB_SCL_PIN);
+		return acknowledged;
+	}
+
+	static uint8 imu660rb_iic_read_byte (uint8 last_byte)
+	{
+		uint8 count = 8U;
+		uint8 dat = 0U;
+
+		gpio_high(IMU660RB_SDA_PIN);
+		while (count--)
+		{
+			gpio_high(IMU660RB_SCL_PIN);
+			dat = (uint8)((dat << 1) | gpio_get_level(IMU660RB_SDA_PIN));
+			gpio_low(IMU660RB_SCL_PIN);
+		}
+
+		if (last_byte)
+		{
+			gpio_high(IMU660RB_SDA_PIN);
+		}
+		else
+		{
+			gpio_low(IMU660RB_SDA_PIN);
+		}
+		gpio_high(IMU660RB_SCL_PIN);
+		gpio_low(IMU660RB_SCL_PIN);
+		gpio_high(IMU660RB_SDA_PIN);
+		return dat;
+	}
+
+	static uint8 imu660rb_iic_read_at (uint8 address, uint8 reg, uint8 *dat, uint32 len)
+	{
+		uint8 success = 0U;
+		uint32 remaining = len;
+
+		imu660rb_iic_start();
+		if (imu660rb_iic_write_byte((uint8)(address << 1))
+			&& imu660rb_iic_write_byte(reg))
+		{
+			imu660rb_iic_start();
+			if (imu660rb_iic_write_byte((uint8)((address << 1) | 0x01U)))
+			{
+				success = 1U;
+				while (remaining)
+				{
+					*dat++ = imu660rb_iic_read_byte(remaining == 1U);
+					remaining--;
+				}
+			}
+		}
+
+		imu660rb_iic_stop();
+		while (remaining)
+		{
+			*dat++ = 0xFFU;
+			remaining--;
+		}
+		return success;
+	}
+
+	static void imu660rb_write_register (uint8 reg, uint8 dat)
+	{
+		imu660rb_iic_start();
+		imu660rb_iic_write_byte((uint8)(imu660rb_iic_address << 1));
+		imu660rb_iic_write_byte(reg);
+		imu660rb_iic_write_byte(dat);
+		imu660rb_iic_stop();
+	}
+
+	static uint8 imu660rb_read_register (uint8 reg)
+	{
+		uint8 dat;
+		imu660rb_iic_read_at(imu660rb_iic_address, reg, &dat, 1U);
+		return dat;
+	}
+
+	static void imu660rb_read_registers (uint8 reg, uint8 *dat, uint32 len)
+	{
+		imu660rb_iic_read_at(imu660rb_iic_address, reg, dat, len);
+	}
 
 #endif
+
+void imu660rb_prepare_iic_bus (void)
+{
+#if (IMU660RB_USE_INTERFACE==SOFT_IIC)
+	uint8 pulse_count;
+
+	gpio_init(IMU660RB_SCL_PIN, GPO, GPIO_HIGH, GPO_OPEN_DTAIN);
+	gpio_init(IMU660RB_SDA_PIN, GPO, GPIO_HIGH, GPO_OPEN_DTAIN);
+	for (pulse_count = 0U; pulse_count < 9U; pulse_count++)
+	{
+		gpio_low(IMU660RB_SCL_PIN);
+		gpio_high(IMU660RB_SCL_PIN);
+	}
+	imu660rb_iic_stop();
+#endif
+}
+
+uint8 imu660rb_get_chip_id (void)
+{
+    return imu660rb_read_register(IMU660RB_CHIP_ID);
+}
+
+uint8 imu660rb_get_chip_id_at (uint8 address)
+{
+	uint8 chip_id;
+	imu660rb_iic_read_at(address, IMU660RB_CHIP_ID, &chip_id, 1U);
+	return chip_id;
+}
+
+uint8 imu660rb_get_iic_address (void)
+{
+	return imu660rb_iic_address;
+}
+
+static uint8 imu660rb_select_iic_address (void)
+{
+	if (imu660rb_get_chip_id_at(IMU660RB_DEV_ADDR) == IMU660RB_CHIP_ID_VALUE)
+	{
+		imu660rb_iic_address = IMU660RB_DEV_ADDR;
+		return 1U;
+	}
+	if (imu660rb_get_chip_id_at(IMU660RB_DEV_ADDR_ALT) == IMU660RB_CHIP_ID_VALUE)
+	{
+		imu660rb_iic_address = IMU660RB_DEV_ADDR_ALT;
+		return 1U;
+	}
+	imu660rb_iic_address = IMU660RB_DEV_ADDR;
+	return 0U;
+}
 
 //-------------------------------------------------------------------------------------------------------------------
 // 函数简介     IMU660RB 自检
@@ -308,9 +471,9 @@ static uint8 imu660rb_self_check (void)
             return_state =  1;
             break;
         }
-        dat = imu660rb_read_register(IMU660RB_CHIP_ID);
+        dat = imu660rb_get_chip_id();
         system_delay_ms(1);
-    }while(0x6B != dat);                                                        // 读取设备ID是否等于0X24，如果不是0X24则认为没检测到设备
+    }while(IMU660RB_CHIP_ID_VALUE != dat);                                      // WHO_AM_I 不匹配则认为未检测到设备
     return return_state;
 }
 
@@ -403,6 +566,7 @@ float imu660rb_gyro_transition (int16 gyro_value)
 uint8 imu660rb_init (void)
 {
     uint8 return_state = 0;
+    imu660rb_prepare_iic_bus();
     system_delay_ms(20);                                                        // 等待设备上电成功
 
 #if (IMU660RB_USE_INTERFACE==HARDWARE_SPI)
@@ -417,8 +581,11 @@ uint8 imu660rb_init (void)
 //	soft_spi_init(IMU660RB_SPI, SPI_MODE0, 0, IMU963RA_SPC_PIN, IMU963RA_SDI_PIN, IMU963RA_SDO_PIN, IMU963RA_CS_PIN);
 	
 #elif (IMU660RB_USE_INTERFACE==SOFT_IIC)
-	
-	soft_iic_init(&imu660rb_iic_struct, IMU660RB_DEV_ADDR, IMU660RB_SOFT_IIC_DELAY, IMU660RB_SCL_PIN, IMU660RB_SDA_PIN);        // 配置 IMU660RB 的 IIC 端口
+
+	if (!imu660rb_select_iic_address())
+	{
+		return 1U;
+	}
 	
 #endif
 	

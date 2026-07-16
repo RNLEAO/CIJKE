@@ -60,7 +60,7 @@
 #include "zf_common_typedef.h"
 #include "zf_device_type.h"
 
-#define IMU660RB_USE_INTERFACE       SOFT_SPI                        	// 默认使用软件 SPI 方式驱动
+#define IMU660RB_USE_INTERFACE       SOFT_IIC                         // P40/P41 软件 IIC，绕过异常的 P42/P43 SPI 链路
 #if (IMU660RB_USE_INTERFACE==HARDWARE_SPI)
 //====================================================硬件 SPI 驱动====================================================
 	#define IMU660RB_SPI_SPEED          ((uint32)10 * 1000 * 1000U)  	// 硬件 SPI 速率
@@ -80,7 +80,7 @@
 //====================================================软件 SPI 驱动====================================================
 #elif (IMU660RB_USE_INTERFACE==SOFT_IIC)
 //====================================================软件 IIC 驱动====================================================
-	#define IMU660RB_SOFT_IIC_DELAY     (0)                             // 软件 IIC 的时钟延时周期 数值越小 IIC 通信速率越快
+	#define IMU660RB_SOFT_IIC_DELAY     (0)                             // GPIO 调用本身提供足够的边沿间隔
 	#define IMU660RB_SCL_PIN            (IO_P40)                        // 软件 IIC SCL 引脚 连接 IMU660RB 的 SCL 引脚
 	#define IMU660RB_SDA_PIN            (IO_P41)                        // 软件 IIC SDA 引脚 连接 IMU660RB 的 SDA 引脚
 //====================================================软件 IIC 驱动====================================================
@@ -89,7 +89,9 @@
 #define IMU660RB_TIMEOUT_COUNT      (0x00FF)                            // IMU660 超时计数
 
 //================================================定义 imu660rb 内部地址================================================
-#define IMU660RB_DEV_ADDR           (0x6B)                              // SA0接地：0x68 SA0上拉：0x69 模块默认上拉
+#define IMU660RB_DEV_ADDR           (0x6B)                              // SA0/SDO 高电平时的七位 IIC 地址
+#define IMU660RB_DEV_ADDR_ALT       (0x6A)                              // SA0/SDO 低电平时的备用七位 IIC 地址
+#define IMU660RB_CHIP_ID_VALUE      (0x6B)
 #define IMU660RB_SPI_W              (0x00)
 #define IMU660RB_SPI_R              (0x80)
 
@@ -133,6 +135,10 @@ extern int16 imu660rb_acc_x, imu660rb_acc_y, imu660rb_acc_z;                    
 //================================================声明 IMU963RB 基础函数================================================
 void  imu660rb_get_acc            (void);                                         // 获取 IMU660RB 加速度计数据
 void  imu660rb_get_gyro           (void);                                         // 获取 IMU660RB 陀螺仪数据
+void  imu660rb_prepare_iic_bus    (void);                                         // 配置 P40/P41 并恢复 IIC 总线空闲状态
+uint8 imu660rb_get_chip_id        (void);                                         // 读取 WHO_AM_I 芯片 ID
+uint8 imu660rb_get_chip_id_at     (uint8 address);                                // 读取指定七位 IIC 地址的 WHO_AM_I
+uint8 imu660rb_get_iic_address    (void);                                         // 返回当前选中的七位 IIC 地址
 float imu660rb_acc_transition     (int16 acc_value);                              // 将 IMU660RB 加速度计数据转换为实际物理数据
 float imu660rb_gyro_transition    (int16 gyro_value);                             // 将 IMU660RB 陀螺仪数据转换为实际物理数据
 uint8 imu660rb_init               (void);                                         // 初始化 IMU660RB
