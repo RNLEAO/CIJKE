@@ -1040,6 +1040,8 @@ void TM1_Isr() interrupt 3
 		{
 			key_scan_cycle_pwm_state();
 		}
+		#elif NEGATIVE_PRESSURE_SCREEN_TEST_BUILD_ENABLE
+			key_scan_cycle_pwm_state();
 		#endif
 
 		if(pwm_state==2){
