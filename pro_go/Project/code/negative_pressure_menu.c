@@ -38,7 +38,7 @@ void display_negative_pressure_bench(uint8 key_press)
         negative_pressure_bench_action(selected);
     }
 
-    lcd_showstr(0U, 0U, "NP BENCH 30% 1S P33");
+    lcd_showstr(0U, 0U, "NP B45 1S H40 5S");
     lcd_showstr(0U, 1U, selected == 0U ? ">EN:" : " EN:");
     lcd_showstr(35U, 1U, negative_pressure_enabled ? "ON " : "OFF");
     lcd_showstr(85U, 1U, selected == 1U ? ">ARM:" : " ARM:");

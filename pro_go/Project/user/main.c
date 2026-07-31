@@ -2240,7 +2240,7 @@ void main()
 //			}
 		
 	// ASCII-cleaned legacy comment.
-#if !RACE_MINIMAL_BUILD
+#if !RACE_MINIMAL_BUILD || NEGATIVE_PRESSURE_SCREEN_TEST_BUILD_ENABLE
 		lcd_init();
 #endif
 		delay_init();
@@ -2300,7 +2300,13 @@ void main()
 			{
 				guide_poll_commands();
 			}
+			#if NEGATIVE_PRESSURE_SCREEN_TEST_BUILD_ENABLE
+			key_value = fetch_ui_key_event();
+			display_negative_pressure_bench(key_value);
+			delay_ms(20);
+			#else
 			delay_ms(2);
+			#endif
 			#else
 
 			encoder_test_report_event();

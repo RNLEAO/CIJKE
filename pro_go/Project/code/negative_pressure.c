@@ -6,8 +6,20 @@
 #error Negative pressure PWM duty assumes the V3 0-to-10000 scale.
 #endif
 
-#if NEGATIVE_PRESSURE_PWM_DUTY_VALUE != 3000U
-#error Negative pressure PWM duty must remain at the validated 30 percent value.
+#if NEGATIVE_PRESSURE_BOOST_DUTY_PERCENT != 45U || \
+    NEGATIVE_PRESSURE_BOOST_PWM_DUTY_VALUE != 4500U
+#error Negative pressure boost must remain at the validated 45 percent value.
+#endif
+
+#if NEGATIVE_PRESSURE_HOLD_DUTY_PERCENT != 40U || \
+    NEGATIVE_PRESSURE_HOLD_PWM_DUTY_VALUE != 4000U
+#error Negative pressure hold must remain at the validated 40 percent value.
+#endif
+
+#if NEGATIVE_PRESSURE_BOOST_TICKS != 200U || \
+    NEGATIVE_PRESSURE_HOLD_TICKS != 1000U || \
+    NEGATIVE_PRESSURE_COOLDOWN_TICKS != 12000U
+#error Negative pressure timing must remain at validated 1s boost, 5s hold, and 60s cooldown.
 #endif
 
 bit negative_pressure_enabled = 0;
@@ -46,13 +58,28 @@ static void negative_pressure_apply_output(void)
         && !negative_pressure_fault_latched
         && pwm_state == 0U
         && !negative_pressure_motion_test_active()
-        && (negative_pressure_state == NEGATIVE_PRESSURE_STATE_PREPARE
-            || negative_pressure_state == NEGATIVE_PRESSURE_STATE_HOLD))
+        && negative_pressure_state == NEGATIVE_PRESSURE_STATE_PREPARE)
     {
         pwm_set_duty(
             NEGATIVE_PRESSURE_PWM_CHANNEL,
-            NEGATIVE_PRESSURE_PWM_DUTY_VALUE);
-        negative_pressure_real_output_percent = NEGATIVE_PRESSURE_DUTY_PERCENT;
+            NEGATIVE_PRESSURE_BOOST_PWM_DUTY_VALUE);
+        negative_pressure_real_output_percent =
+            NEGATIVE_PRESSURE_BOOST_DUTY_PERCENT;
+        return;
+    }
+
+    if (negative_pressure_enabled
+        && negative_pressure_armed
+        && !negative_pressure_fault_latched
+        && pwm_state == 0U
+        && !negative_pressure_motion_test_active()
+        && negative_pressure_state == NEGATIVE_PRESSURE_STATE_HOLD)
+    {
+        pwm_set_duty(
+            NEGATIVE_PRESSURE_PWM_CHANNEL,
+            NEGATIVE_PRESSURE_HOLD_PWM_DUTY_VALUE);
+        negative_pressure_real_output_percent =
+            NEGATIVE_PRESSURE_HOLD_DUTY_PERCENT;
         return;
     }
 #endif
@@ -227,7 +254,7 @@ void negative_pressure_tick(void)
     {
         case NEGATIVE_PRESSURE_STATE_PREPARE:
             negative_pressure_state_ticks++;
-            if (negative_pressure_state_ticks >= NEGATIVE_PRESSURE_PREPARE_TICKS)
+            if (negative_pressure_state_ticks >= NEGATIVE_PRESSURE_BOOST_TICKS)
             {
                 negative_pressure_state = NEGATIVE_PRESSURE_STATE_HOLD;
                 negative_pressure_state_ticks = 0U;
