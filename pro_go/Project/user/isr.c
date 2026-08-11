@@ -319,6 +319,17 @@ static void reset_speed_pid_state(void)
     current_r_pwm_duty = 0.0f;
 }
 
+static void prime_track_t10_closed_loop(void)
+{
+    reset_speed_pid_state();
+    current_l_pwm_inc = TRACK_TEST_T10_CLOSED_LOOP_SEED_PWM;
+    current_r_pwm_inc = TRACK_TEST_T10_CLOSED_LOOP_SEED_PWM;
+    current_l_pwm_inc_last = TRACK_TEST_T10_CLOSED_LOOP_SEED_PWM;
+    current_r_pwm_inc_last = TRACK_TEST_T10_CLOSED_LOOP_SEED_PWM;
+    current_l_pwm_duty = TRACK_TEST_T10_CLOSED_LOOP_SEED_PWM;
+    current_r_pwm_duty = TRACK_TEST_T10_CLOSED_LOOP_SEED_PWM;
+}
+
 void reset_motion_pid_state(void)
 {
     reset_speed_pid_state();
@@ -922,6 +933,8 @@ void TM1_Isr() interrupt 3
 			float right_pid_delta;
 			float left_speed_feedback;
 			float right_speed_feedback;
+			float track_t10_sync_ratio;
+			uint8 track_t10_start_was_active;
 
 			TIM1_CLEAR_FLAG;
 			#if !RACE_MINIMAL_BUILD
@@ -1023,7 +1036,14 @@ void TM1_Isr() interrupt 3
 				track_base_target = L_pid.Target_base;
 				if (g_track_test_mode == TRACK_TEST_MODE_T10)
 				{
+					track_t10_start_was_active =
+						motion_runtime_track_t10_startup_is_active();
 					motion_runtime_track_t10_startup_tick();
+					if (track_t10_start_was_active
+						&& !motion_runtime_track_t10_startup_is_active())
+					{
+						prime_track_t10_closed_loop();
+					}
 				}
 #if TRACK_TEST_STEERING_ENABLED
 				if (g_track_test_mode == TRACK_TEST_MODE_T12)
@@ -1040,6 +1060,12 @@ void TM1_Isr() interrupt 3
 #endif
 				L_pid.Target = track_base_target * (1.0f - track_turn_ratio);
 				R_pid.Target = track_base_target * (1.0f + track_turn_ratio);
+				if (g_track_test_mode == TRACK_TEST_MODE_T10)
+				{
+					track_t10_sync_ratio = motion_runtime_track_t10_sync_ratio();
+					L_pid.Target *= 1.0f - track_t10_sync_ratio;
+					R_pid.Target *= 1.0f + track_t10_sync_ratio;
+				}
 #if TRACK_TEST_START_ASSIST_ENABLED
 				if (g_track_test_mode == TRACK_TEST_MODE_T12)
 				{

@@ -72,6 +72,11 @@ typedef struct
     uint16 t10_start_peak_pwm;
     uint8 t10_right_start_stage;
     uint16 t10_right_start_peak_pwm;
+    uint16 t10_sync_sample_count;
+    uint32 t10_sync_left_total;
+    uint32 t10_sync_right_total;
+    int16 t10_sync_final_x1000;
+    uint16 t10_sync_peak_x1000;
     uint16 left_pwm_final;
     uint16 right_pwm_final;
     uint16 left_saturation_count;
@@ -303,6 +308,16 @@ static void track_test_report_event(void)
             g_track_test_t10_right_start_stage;
         track_result_snapshot.t10_right_start_peak_pwm =
             g_track_test_t10_right_start_peak_pwm;
+        track_result_snapshot.t10_sync_sample_count =
+            g_track_test_t10_sync_sample_count;
+        track_result_snapshot.t10_sync_left_total =
+            g_track_test_t10_sync_left_total;
+        track_result_snapshot.t10_sync_right_total =
+            g_track_test_t10_sync_right_total;
+        track_result_snapshot.t10_sync_final_x1000 =
+            g_track_test_t10_sync_final_x1000;
+        track_result_snapshot.t10_sync_peak_x1000 =
+            g_track_test_t10_sync_peak_x1000;
         track_result_snapshot.left_pwm_final = motion_runtime_track_test_left_pwm_final();
         track_result_snapshot.right_pwm_final = motion_runtime_track_test_right_pwm_final();
         track_result_snapshot.left_saturation_count = g_motor_left_saturation_count;
@@ -688,7 +703,7 @@ static void guide_send_runtime_config(void)
     guide_send_reply(
         "CFG3:STALL P600/1000/1400 PRE50 STEP100 MOV=N8/PK2 SEQ=LR MTEST=OPT\r\n");
     guide_send_reply(
-        "CFG4:T10=L1400/1700/2000 R600/1000/1400 @200/300 R10 M=N8/RAW2X2 REL60 BLEND100 FB=ABS P12\r\n");
+        "CFG4:T10=L1400/1700/2000 R600/1000/1400 @200/300 R10 M=N8/RAW2X2 REL60 SEED1000 SYNC200/12 BLEND100 FB=ABS P12\r\n");
 }
 
 static const int8 *guide_track_test_precheck(void)
@@ -2390,6 +2405,20 @@ static uint8 send_track_test_result_frame(TrackTestResult result)
                               (uint32)track_result_snapshot.t10_right_start_stage);
         diagnostic_append_u32((const int8 *)" RP=",
                               (uint32)track_result_snapshot.t10_right_start_peak_pwm);
+        diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+        diagnostic_append_u32((const int8 *)"T10B:SEED=",
+                              (uint32)TRACK_TEST_T10_CLOSED_LOOP_SEED_PWM);
+        diagnostic_append_u32((const int8 *)" N=",
+                              (uint32)track_result_snapshot.t10_sync_sample_count);
+        diagnostic_append_u32((const int8 *)" L=",
+                              track_result_snapshot.t10_sync_left_total);
+        diagnostic_append_u32((const int8 *)" R=",
+                              track_result_snapshot.t10_sync_right_total);
+        diagnostic_append_i32((const int8 *)" CF=",
+                              (int32)track_result_snapshot.t10_sync_final_x1000);
+        diagnostic_append_u32((const int8 *)" CP=",
+                              (uint32)track_result_snapshot.t10_sync_peak_x1000);
         diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
     }
 

@@ -29,6 +29,7 @@
 #define TRACK_TEST_TURN_RATIO_LIMIT 0.10f
 #define TRACK_TEST_MODE_T10 0U
 #define TRACK_TEST_MODE_T12 1U
+#define TRACK_TEST_T10_CLOSED_LOOP_SEED_PWM 1000.0f
 #if TRACK_TEST_START_ASSIST_ENABLED
 #define TRACK_TEST_TARGET_RAMP_MS 500U
 #define TRACK_TEST_DECEL_RAMP_MS 500U
@@ -51,6 +52,10 @@
 #define TRACK_TEST_T10_START_CONFIRM_TICKS 2U
 #define TRACK_TEST_T10_RELEASE_TARGET 60.0f
 #define TRACK_TEST_T10_STEER_BLEND_MS 100U
+#define TRACK_TEST_T10_SYNC_MS 200U
+#define TRACK_TEST_T10_SYNC_GAIN 0.30f
+#define TRACK_TEST_T10_SYNC_LIMIT 0.12f
+#define TRACK_TEST_T10_SYNC_MIN_TOTAL 8U
 #endif
 
 typedef enum
@@ -185,6 +190,11 @@ extern volatile uint8 g_track_test_t10_start_stage;
 extern volatile uint16 g_track_test_t10_start_peak_pwm;
 extern volatile uint8 g_track_test_t10_right_start_stage;
 extern volatile uint16 g_track_test_t10_right_start_peak_pwm;
+extern volatile uint16 g_track_test_t10_sync_sample_count;
+extern volatile uint32 g_track_test_t10_sync_left_total;
+extern volatile uint32 g_track_test_t10_sync_right_total;
+extern volatile int16 g_track_test_t10_sync_final_x1000;
+extern volatile uint16 g_track_test_t10_sync_peak_x1000;
 
 extern float g_track_duty_limit;
 extern float g_speed_pid_delta_limit;
@@ -284,6 +294,7 @@ uint8 motion_runtime_track_t10_startup_is_active(void);
 float motion_runtime_track_t10_left_start_pwm(void);
 float motion_runtime_track_t10_right_start_pwm(void);
 float motion_runtime_track_t10_steering_scale(void);
+float motion_runtime_track_t10_sync_ratio(void);
 uint16 motion_runtime_track_test_remaining_ms(void);
 uint16 motion_runtime_track_test_sample_count(void);
 int32 motion_runtime_track_test_left_average_x10(void);

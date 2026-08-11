@@ -45,6 +45,7 @@
 #define TRACK_TEST_TARGET_RAMP_TICKS    (TRACK_TEST_TARGET_RAMP_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
 #define TRACK_TEST_DECEL_RAMP_TICKS     (TRACK_TEST_DECEL_RAMP_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
 #define TRACK_TEST_T10_STEER_BLEND_TICKS (TRACK_TEST_T10_STEER_BLEND_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
+#define TRACK_TEST_T10_SYNC_TICKS       (TRACK_TEST_T10_SYNC_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
 #endif
 #define TRACK_TEST_SPEED_KP                 5.9f
 #define TRACK_TEST_SPEED_KI                 0.50f
@@ -164,6 +165,11 @@ volatile uint8 g_track_test_t10_start_stage = 0U;
 volatile uint16 g_track_test_t10_start_peak_pwm = 0U;
 volatile uint8 g_track_test_t10_right_start_stage = 0U;
 volatile uint16 g_track_test_t10_right_start_peak_pwm = 0U;
+volatile uint16 g_track_test_t10_sync_sample_count = 0U;
+volatile uint32 g_track_test_t10_sync_left_total = 0UL;
+volatile uint32 g_track_test_t10_sync_right_total = 0UL;
+volatile int16 g_track_test_t10_sync_final_x1000 = 0;
+volatile uint16 g_track_test_t10_sync_peak_x1000 = 0U;
 static volatile uint8 track_test_active = 0U;
 static volatile uint8 track_test_event = TRACK_TEST_RESULT_IDLE;
 static volatile uint8 motor_test_both_passed = 0U;
@@ -184,6 +190,8 @@ static uint8 track_test_t10_start_active = 0U;
 static uint8 track_test_t10_left_confirm_ticks = 0U;
 static uint8 track_test_t10_right_confirm_ticks = 0U;
 static uint8 track_test_t10_steer_blend_ticks = 0U;
+static uint8 track_test_t10_sync_ticks_remaining = 0U;
+static float track_test_t10_sync_ratio_value = 0.0f;
 #endif
 static uint8 track_test_pid_saved = 0U;
 static float track_test_saved_left_kp = 0.0f;
@@ -2036,12 +2044,19 @@ uint8 motion_runtime_track_test_start_mode(uint8 mode)
     g_track_test_t10_right_start_stage = mode == TRACK_TEST_MODE_T10 ? 1U : 0U;
     g_track_test_t10_right_start_peak_pwm = mode == TRACK_TEST_MODE_T10
         ? (uint16)TRACK_TEST_T10_RIGHT_BREAKAWAY_PWM : 0U;
+    g_track_test_t10_sync_sample_count = 0U;
+    g_track_test_t10_sync_left_total = 0UL;
+    g_track_test_t10_sync_right_total = 0UL;
+    g_track_test_t10_sync_final_x1000 = 0;
+    g_track_test_t10_sync_peak_x1000 = 0U;
 #if TRACK_TEST_START_ASSIST_ENABLED
     track_test_t10_start_active = mode == TRACK_TEST_MODE_T10 ? 1U : 0U;
     track_test_t10_left_confirm_ticks = 0U;
     track_test_t10_right_confirm_ticks = 0U;
     track_test_t10_steer_blend_ticks = mode == TRACK_TEST_MODE_T10
         ? 0U : TRACK_TEST_T10_STEER_BLEND_TICKS;
+    track_test_t10_sync_ticks_remaining = 0U;
+    track_test_t10_sync_ratio_value = 0.0f;
 #endif
     track_test_event = TRACK_TEST_RESULT_IDLE;
     g_track_test_mode = mode;
@@ -2200,7 +2215,12 @@ void motion_runtime_track_t10_startup_tick(void)
 #if TRACK_TEST_START_ASSIST_ENABLED
     uint32 left_total;
     uint32 right_total;
+    uint32 larger_total;
+    uint32 smaller_total;
     uint16 sample_count;
+    uint16 abs_ratio_x1000;
+    int16 ratio_x1000;
+    float imbalance;
 
     if (!track_test_active || g_track_test_mode != TRACK_TEST_MODE_T10)
     {
@@ -2209,6 +2229,57 @@ void motion_runtime_track_t10_startup_tick(void)
 
     if (!track_test_t10_start_active)
     {
+        if (track_test_t10_sync_ticks_remaining > 0U)
+        {
+            g_track_test_t10_sync_left_total += (uint32)g_encoder_left_raw;
+            g_track_test_t10_sync_right_total += (uint32)g_encoder_right_raw;
+            if (g_track_test_t10_sync_sample_count < 65535U)
+            {
+                g_track_test_t10_sync_sample_count++;
+            }
+
+            larger_total = g_track_test_t10_sync_left_total
+                > g_track_test_t10_sync_right_total
+                ? g_track_test_t10_sync_left_total
+                : g_track_test_t10_sync_right_total;
+            smaller_total = g_track_test_t10_sync_left_total
+                < g_track_test_t10_sync_right_total
+                ? g_track_test_t10_sync_left_total
+                : g_track_test_t10_sync_right_total;
+            if (larger_total >= TRACK_TEST_T10_SYNC_MIN_TOTAL)
+            {
+                imbalance = (float)(larger_total - smaller_total)
+                    / (float)larger_total;
+                if (g_track_test_t10_sync_left_total
+                    < g_track_test_t10_sync_right_total)
+                {
+                    imbalance = -imbalance;
+                }
+                track_test_t10_sync_ratio_value = motion_clamp_float(
+                    imbalance * TRACK_TEST_T10_SYNC_GAIN,
+                    -TRACK_TEST_T10_SYNC_LIMIT,
+                    TRACK_TEST_T10_SYNC_LIMIT);
+            }
+            else
+            {
+                track_test_t10_sync_ratio_value = 0.0f;
+            }
+
+            ratio_x1000 = (int16)(track_test_t10_sync_ratio_value * 1000.0f);
+            g_track_test_t10_sync_final_x1000 = ratio_x1000;
+            abs_ratio_x1000 = ratio_x1000 < 0
+                ? (uint16)(-ratio_x1000) : (uint16)ratio_x1000;
+            if (abs_ratio_x1000 > g_track_test_t10_sync_peak_x1000)
+            {
+                g_track_test_t10_sync_peak_x1000 = abs_ratio_x1000;
+            }
+            track_test_t10_sync_ticks_remaining--;
+        }
+        else
+        {
+            track_test_t10_sync_ratio_value = 0.0f;
+        }
+
         if (track_test_t10_steer_blend_ticks < TRACK_TEST_T10_STEER_BLEND_TICKS)
         {
             track_test_t10_steer_blend_ticks++;
@@ -2299,6 +2370,13 @@ void motion_runtime_track_t10_startup_tick(void)
     {
         track_test_t10_start_active = 0U;
         track_test_t10_steer_blend_ticks = 0U;
+        track_test_t10_sync_ticks_remaining = TRACK_TEST_T10_SYNC_TICKS;
+        track_test_t10_sync_ratio_value = 0.0f;
+        g_track_test_t10_sync_sample_count = 0U;
+        g_track_test_t10_sync_left_total = 0UL;
+        g_track_test_t10_sync_right_total = 0UL;
+        g_track_test_t10_sync_final_x1000 = 0;
+        g_track_test_t10_sync_peak_x1000 = 0U;
         g_track_test_t10_start_release_sample_count = sample_count;
         g_track_test_t10_start_release_left_total = left_total;
         g_track_test_t10_start_release_right_total = right_total;
@@ -2395,6 +2473,21 @@ float motion_runtime_track_t10_steering_scale(void)
         / (float)TRACK_TEST_T10_STEER_BLEND_TICKS;
 #else
     return 1.0f;
+#endif
+}
+
+float motion_runtime_track_t10_sync_ratio(void)
+{
+#if TRACK_TEST_START_ASSIST_ENABLED
+    if (!track_test_active
+        || g_track_test_mode != TRACK_TEST_MODE_T10
+        || track_test_t10_start_active)
+    {
+        return 0.0f;
+    }
+    return track_test_t10_sync_ratio_value;
+#else
+    return 0.0f;
 #endif
 }
 
