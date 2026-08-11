@@ -156,7 +156,10 @@ static uint8 scope_test_phase = 0U;
 #define TRACK_T12_ARC_RATIO_MIN              -0.04f
 #define TRACK_T12_ARC_RATIO_MAX               0.36f
 #define TRACK_T12_EXIT_SPEED_SCALE             0.75f
-#define TRACK_T12_LINE_FEEDBACK               0.15f
+#define TRACK_T12_LINE_FEEDBACK_FRONT         0.15f
+#define TRACK_T12_LINE_FEEDBACK_BACK          0.55f
+#define TRACK_T12_LINE_BLEND_START_DEG        90.0f
+#define TRACK_T12_LINE_BLEND_END_DEG         145.0f
 #define TRACK_T12_TURN_FILTER_ALPHA           0.25f
 #define TRACK_T12_REACQUIRE_FILTER_ALPHA      0.55f
 #define TRACK_T12_REACQUIRE_SUM_TOLERANCE     8U
@@ -678,6 +681,8 @@ static void track_t12_update_arc_control(void)
 	float correction_fall_limit;
 	float rate_kp;
 	float gain_profile;
+	float line_profile;
+	float line_feedback_gain;
 	float profile;
 	float line_feedback;
 
@@ -738,8 +743,14 @@ static void track_t12_update_arc_control(void)
 		feedforward_ratio + correction,
 		TRACK_T12_ARC_RATIO_MIN,
 		TRACK_T12_ARC_RATIO_MAX);
-	line_feedback = TRACK_T12_LINE_FEEDBACK
-		* track_line_turn_ratio_raw(error);
+	line_profile = track_t12_smoothstep(
+		(track_t12_angle - TRACK_T12_LINE_BLEND_START_DEG)
+			/ (TRACK_T12_LINE_BLEND_END_DEG
+				- TRACK_T12_LINE_BLEND_START_DEG));
+	line_feedback_gain = TRACK_T12_LINE_FEEDBACK_FRONT
+		+ (TRACK_T12_LINE_FEEDBACK_BACK - TRACK_T12_LINE_FEEDBACK_FRONT)
+			* line_profile;
+	line_feedback = line_feedback_gain * track_line_turn_ratio_raw(error);
 	track_t12_arc_ratio = limit_function(
 		(float)g_track_test_t12_direction * feedforward_ratio
 			+ line_feedback,

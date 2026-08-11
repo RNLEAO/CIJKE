@@ -683,7 +683,7 @@ static void guide_send_track_test_started(uint8 mode, int8 force_direction)
             : (const int8 *)"AUTO");
     reply_length = zf_sprintf(
         guide_reply_buffer,
-        (const int8 *)"OK:TTEST Z09-10/T12R8 V120 T3000 G70/130/35 P22/28.5/6 K6/11.5@130/145 T145/172 X160/182 S80/35 Q65/80 TO180 M=%s\r\n",
+        (const int8 *)"OK:TTEST Z09-10/T12R8 V120 T3000 G70/130/35 P22/28.5/6 K6/11.5@130/145 T145/172 X160/182 Q65/80 F15/55 TO180 M=%s\r\n",
         mode_text);
     if (reply_length >= GUIDE_REPLY_SIZE)
     {
@@ -715,7 +715,7 @@ static void guide_send_runtime_config(void)
     guide_send_reply((const char *)guide_reply_buffer);
 
     guide_send_reply(
-        "CFG2:RACE8 T10V180 T12V120 T3000 L120 R500 P22/28.5/6 G130 K6/11.5@130/145 T145/172 X160/182 C3 B80 S80/35 Q65/80 TO180 BK600 B70/55 LP25\r\n");
+        "CFG2:RACE8 T10V180 T12V120 T3000 L120 R500 P22/28.5/6 G130 K6/11.5@130/145 T145/172 X160/182 C3 B80 S80/35 Q65/80 F15/55@90/145 TO180 BK600 B70/55 LP25\r\n");
     guide_send_reply(
         "CFG3:STALL P600/1000/1400 PRE50 STEP100 MOV=N8/PK2 SEQ=LR MTEST=OPT\r\n");
     guide_send_reply(
