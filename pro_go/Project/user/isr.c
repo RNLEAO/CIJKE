@@ -179,6 +179,10 @@ static uint8 scope_test_phase = 0U;
 #define TRACK_T12_CONFIRM_INNER_MIN          6U
 #define TRACK_T12_CONFIRM_SIDE_DIFF         20U
 #define TRACK_T12_CONFIRM_ERROR_MIN          0.18f
+#define TRACK_T12_FORCE_ENTRY_SUM_MIN       200U
+#define TRACK_T12_FORCE_ENTRY_INNER_MIN      80U
+#define TRACK_T12_FORCE_ENTRY_SIDE_DIFF      80U
+#define TRACK_T12_FORCE_ENTRY_ERROR_MIN       0.65f
 
 static uint8 track_t12_state = TRACK_T12_APPROACH;
 static uint8 track_t12_arm_ticks = 0U;
@@ -570,6 +574,34 @@ static uint8 track_t12_entry_matches(int8 direction)
 			>= TRACK_T12_CONFIRM_INNER_MIN
 		&& left_pair >= (uint16)(right_pair + TRACK_T12_CONFIRM_SIDE_DIFF)
 		&& error >= TRACK_T12_CONFIRM_ERROR_MIN;
+}
+
+static uint8 track_t12_force_entry_matches(int8 direction)
+{
+	uint16 sum = inductance4_get_line_sum();
+	uint16 left_pair = (uint16)g_inductance4[INDUCTANCE4_L].normalized
+		+ (uint16)g_inductance4[INDUCTANCE4_LM].normalized;
+	uint16 right_pair = (uint16)g_inductance4[INDUCTANCE4_RM].normalized
+		+ (uint16)g_inductance4[INDUCTANCE4_R].normalized;
+
+	if (!inductance4_line_is_present()
+		|| sum < TRACK_T12_FORCE_ENTRY_SUM_MIN)
+	{
+		return 0U;
+	}
+	if (direction < 0)
+	{
+		return g_inductance4[INDUCTANCE4_RM].normalized
+				>= TRACK_T12_FORCE_ENTRY_INNER_MIN
+			&& right_pair >= (uint16)(left_pair
+				+ TRACK_T12_FORCE_ENTRY_SIDE_DIFF)
+			&& error <= -TRACK_T12_FORCE_ENTRY_ERROR_MIN;
+	}
+	return g_inductance4[INDUCTANCE4_LM].normalized
+			>= TRACK_T12_FORCE_ENTRY_INNER_MIN
+		&& left_pair >= (uint16)(right_pair
+			+ TRACK_T12_FORCE_ENTRY_SIDE_DIFF)
+		&& error >= TRACK_T12_FORCE_ENTRY_ERROR_MIN;
 }
 
 static uint8 track_t12_exit_matches(int8 direction)
@@ -1006,9 +1038,28 @@ static void track_t12_update(void)
 			track_t12_update_approach_diagnostic();
 			if (g_track_test_t12_force_direction != 0)
 			{
-				track_t12_start_half(
-					g_track_test_t12_force_direction,
-					TRACK_T12_ENTRY_SOURCE_FORCE);
+				g_track_test_t12_direction =
+					g_track_test_t12_force_direction;
+				if (track_t12_force_entry_matches(
+					g_track_test_t12_force_direction))
+				{
+					if (track_t12_entry_ticks
+						< TRACK_T12_ENTRY_CONFIRM_TICKS)
+					{
+						track_t12_entry_ticks++;
+					}
+					if (track_t12_entry_ticks
+						>= TRACK_T12_ENTRY_CONFIRM_TICKS)
+					{
+						track_t12_start_half(
+							g_track_test_t12_force_direction,
+							TRACK_T12_ENTRY_SOURCE_FORCE);
+					}
+				}
+				else
+				{
+					track_t12_entry_ticks = 0U;
+				}
 				break;
 			}
 			if (candidate != 0)
