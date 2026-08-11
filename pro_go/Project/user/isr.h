@@ -86,6 +86,7 @@ extern volatile unsigned int xdata g_track_t12_target_rate_x10;
 extern volatile unsigned int xdata g_track_t12_actual_rate_x10;
 extern volatile unsigned int xdata g_track_t12_rate_error_peak_x10;
 extern volatile unsigned int xdata g_track_t12_exit_ratio_x1000;
+extern volatile unsigned int xdata g_track_t12_exit_speed_scale_x1000;
 extern volatile unsigned char xdata g_track_t12_post_valid;
 extern volatile unsigned char xdata g_track_t12_post_delay_ticks;
 extern volatile unsigned int xdata g_track_t12_post_angle_x10;

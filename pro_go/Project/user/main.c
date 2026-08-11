@@ -112,6 +112,7 @@ typedef struct
     uint16 t12_actual_rate_x10;
     uint16 t12_rate_error_peak_x10;
     uint16 t12_exit_ratio_x1000;
+    uint16 t12_exit_speed_scale_x1000;
     uint8 t12_post_valid;
     uint8 t12_post_delay_ticks;
     uint16 t12_post_angle_x10;
@@ -350,6 +351,8 @@ static void track_test_report_event(void)
             g_track_t12_rate_error_peak_x10;
         track_result_snapshot.t12_exit_ratio_x1000 =
             g_track_t12_exit_ratio_x1000;
+        track_result_snapshot.t12_exit_speed_scale_x1000 =
+            g_track_t12_exit_speed_scale_x1000;
         track_result_snapshot.t12_post_valid = g_track_t12_post_valid;
         track_result_snapshot.t12_post_delay_ticks = g_track_t12_post_delay_ticks;
         track_result_snapshot.t12_post_angle_x10 = g_track_t12_post_angle_x10;
@@ -667,7 +670,7 @@ static void guide_send_track_test_started(uint8 mode, int8 force_direction)
             : (const int8 *)"AUTO");
     reply_length = zf_sprintf(
         guide_reply_buffer,
-        (const int8 *)"OK:TTEST Z09-10/T12R8 V120 T3000 G70/130/55 P22/28.5/10 T145/175 X165/185 C3 B120 M=%s\r\n",
+        (const int8 *)"OK:TTEST Z09-10/T12R8 V120 T3000 G70/130/35 P22/28.5/6 T145/172 X160/182 C3 B80 S1000 TO180 M=%s\r\n",
         mode_text);
     if (reply_length >= GUIDE_REPLY_SIZE)
     {
@@ -699,7 +702,7 @@ static void guide_send_runtime_config(void)
     guide_send_reply((const char *)guide_reply_buffer);
 
     guide_send_reply(
-        "CFG2:RACE8 T10V180 T12V120 T3000 L120 R500 P22/28.5/10 G130 T145/175 X165/185 C3 B120 BK600 B70/55 LP25\r\n");
+        "CFG2:RACE8 T10V180 T12V120 T3000 L120 R500 P22/28.5/6 G130 T145/172 X160/182 C3 B80 S1000 TO180 BK600 B70/55 LP25\r\n");
     guide_send_reply(
         "CFG3:STALL P600/1000/1400 PRE50 STEP100 MOV=N8/PK2 SEQ=LR MTEST=OPT\r\n");
     guide_send_reply(
@@ -2379,6 +2382,8 @@ static uint8 send_track_test_result_frame(TrackTestResult result)
                               (uint32)track_result_snapshot.t12_rate_error_peak_x10);
         diagnostic_append_u32((const int8 *)" TR=",
                               (uint32)track_result_snapshot.t12_exit_ratio_x1000);
+        diagnostic_append_u32((const int8 *)" BS=",
+                              (uint32)track_result_snapshot.t12_exit_speed_scale_x1000);
         diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
 
         diagnostic_append_u32((const int8 *)"T12P:V=",

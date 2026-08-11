@@ -2069,6 +2069,17 @@ uint8 motion_runtime_track_test_stop(void)
     return was_active;
 }
 
+uint8 motion_runtime_track_test_abort_start_sync(void)
+{
+    if (!track_test_active || g_track_test_mode != TRACK_TEST_MODE_T12)
+    {
+        return 0U;
+    }
+
+    motion_track_test_finish(TRACK_TEST_RESULT_START_SYNC, 1U);
+    return 1U;
+}
+
 void motion_runtime_track_test_tick(void)
 {
     float left_speed;
@@ -2492,6 +2503,7 @@ const char *motion_runtime_track_test_result_text(void)
         case TRACK_TEST_RESULT_LINE_LOST: return "LINE_LOST";
         case TRACK_TEST_RESULT_IMU: return "IMU";
         case TRACK_TEST_RESULT_PROTECT: return "PROTECT";
+        case TRACK_TEST_RESULT_START_SYNC: return "START_SYNC";
         default: return "IDLE";
     }
 }

@@ -33,7 +33,7 @@
 #define TRACK_TEST_TARGET_RAMP_MS 500U
 #define TRACK_TEST_DECEL_RAMP_MS 500U
 #define TRACK_TEST_START_SYNC_SAMPLES 100U
-#define TRACK_TEST_T12_START_MONITOR_SAMPLES 140U
+#define TRACK_TEST_T12_START_MONITOR_SAMPLES 180U
 #define TRACK_TEST_START_BREAKAWAY_PWM 600.0f
 #define TRACK_TEST_T10_START_RELEASE_COUNT 100U
 #define TRACK_TEST_T12_START_SYNC_RELEASE_COUNT 300U
@@ -117,7 +117,8 @@ typedef enum
     TRACK_TEST_RESULT_STOPPED,
     TRACK_TEST_RESULT_LINE_LOST,
     TRACK_TEST_RESULT_IMU,
-    TRACK_TEST_RESULT_PROTECT
+    TRACK_TEST_RESULT_PROTECT,
+    TRACK_TEST_RESULT_START_SYNC
 } TrackTestResult;
 
 typedef enum
@@ -277,6 +278,7 @@ uint8 motion_runtime_track_test_start(void);
 uint8 motion_runtime_track_test_start_mode(uint8 mode);
 void motion_runtime_set_track_test_t12_force_direction(int8 direction);
 uint8 motion_runtime_track_test_stop(void);
+uint8 motion_runtime_track_test_abort_start_sync(void);
 void motion_runtime_track_test_tick(void);
 uint8 motion_runtime_track_test_is_active(void);
 void motion_runtime_track_t10_startup_tick(void);
