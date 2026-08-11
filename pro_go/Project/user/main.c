@@ -16,12 +16,14 @@ uint8 display_mode=0;
 
 extern int zhijiao_flag;
 
-#define DIAGNOSTIC_TX_BUFFER_SIZE 512U
+#define DIAGNOSTIC_TX_BUFFER_SIZE 640U
 #define GUIDE_STEP_COUNT          10U
 #define GUIDE_COMMAND_SIZE        32U
 #define GUIDE_REPLY_SIZE         128U
 #define GUIDE_CAPTURE_SAMPLES     40U
 #define GUIDE_COMMAND_IDLE_POLLS   3U
+#define I4_STREAM_PERIOD_LOOPS    125U
+#define I4_LCD_PERIOD_LOOPS        50U
 #if !RACE_MINIMAL_BUILD
 #define SCOPE_CHANNEL_COUNT        8U
 #define SCOPE_PACKET_SIZE         40U
@@ -62,6 +64,14 @@ typedef struct
     uint16 start_sample_count;
     uint32 start_left_total;
     uint32 start_right_total;
+    uint8 t10_start_release_mask;
+    uint16 t10_start_release_sample_count;
+    uint32 t10_start_release_left_total;
+    uint32 t10_start_release_right_total;
+    uint8 t10_start_stage;
+    uint16 t10_start_peak_pwm;
+    uint8 t10_right_start_stage;
+    uint16 t10_right_start_peak_pwm;
     uint16 left_pwm_final;
     uint16 right_pwm_final;
     uint16 left_saturation_count;
@@ -77,6 +87,16 @@ typedef struct
     uint16 t12_start_release_sample_count;
     uint32 t12_start_release_left_total;
     uint32 t12_start_release_right_total;
+    uint16 t12_approach_max_sum;
+    uint16 t12_approach_max_error_x1000;
+    uint16 t12_approach_max_side_diff;
+    uint8 t12_entry_source;
+    uint8 t12_entry_norm_l;
+    uint8 t12_entry_norm_lm;
+    uint8 t12_entry_norm_rm;
+    uint8 t12_entry_norm_r;
+    int16 t12_entry_error_x1000;
+    uint16 t12_entry_sum;
     uint8 t12_exit_trigger_mask;
     uint16 t12_exit_angle_x10;
     uint16 t12_exit_half_ticks;
@@ -126,6 +146,12 @@ static uint8 xdata guide_status_pending;
 #endif
 static uint16 xdata diagnostic_send_offset;
 static uint8 xdata diagnostic_compact_pending;
+static uint8 xdata i4_diagnostic_pending;
+static uint8 xdata i4_stream_enabled;
+static uint16 xdata i4_stream_loop_count;
+static uint8 xdata i4_lcd_loop_count;
+static StallDiagResult xdata stall_diag_report_pending;
+static uint8 xdata stall_diag_status_pending;
 static MotorTestResult xdata motor_test_report_pending;
 #if !RACE_MINIMAL_BUILD
 static EncoderTestResult xdata encoder_test_report_pending;
@@ -151,7 +177,9 @@ static void guide_finish_capture(void);
 static void guide_send_reply(const char *reply);
 static void guide_send_ttest_error(const int8 *reason);
 static void guide_send_motor_test_started(MotorTestSide side);
-static void guide_send_track_test_started(uint8 mode);
+static void guide_send_stall_diag_started(MotorTestSide side);
+static void guide_start_stall_diag(MotorTestSide side);
+static void guide_send_track_test_started(uint8 mode, int8 force_direction);
 static void guide_send_runtime_config(void);
 static const int8 *guide_track_test_precheck(void);
 #if !RACE_MINIMAL_BUILD
@@ -159,6 +187,9 @@ static void scope_service_arm(void);
 static uint8 send_scope_frame(void);
 #endif
 static uint8 send_compact_status_frame(void);
+static uint8 send_i4_diagnostic_frame(void);
+static uint8 send_stall_diag_status_frame(void);
+static uint8 send_stall_diag_result_frame(StallDiagResult result);
 static uint8 send_motor_test_result_frame(MotorTestResult result);
 #if !RACE_MINIMAL_BUILD
 static uint8 send_encoder_test_result_frame(EncoderTestResult result);
@@ -181,6 +212,33 @@ static const int8 *motor_test_result_text(MotorTestResult result)
         case MOTOR_TEST_RESULT_ENCODER_MODE: return (const int8 *)"ENC_MODE";
         case MOTOR_TEST_RESULT_ENCODER_NOISE: return (const int8 *)"ENC_NOISE";
         default: return (const int8 *)"IDLE";
+    }
+}
+
+static const int8 *stall_diag_result_text(StallDiagResult result)
+{
+    switch (result)
+    {
+        case STALL_DIAG_RESULT_RUNNING: return (const int8 *)"RUNNING";
+        case STALL_DIAG_RESULT_PASS: return (const int8 *)"PASS";
+        case STALL_DIAG_RESULT_STOPPED: return (const int8 *)"STOPPED";
+        case STALL_DIAG_RESULT_LEFT_STALL: return (const int8 *)"L_STALL";
+        case STALL_DIAG_RESULT_RIGHT_STALL: return (const int8 *)"R_STALL";
+        case STALL_DIAG_RESULT_IMU: return (const int8 *)"IMU";
+        case STALL_DIAG_RESULT_PROTECT: return (const int8 *)"PROTECT";
+        case STALL_DIAG_RESULT_ENCODER_MODE: return (const int8 *)"ENC_MODE";
+        case STALL_DIAG_RESULT_ENCODER_NOISE: return (const int8 *)"ENC_NOISE";
+        default: return (const int8 *)"IDLE";
+    }
+}
+
+static void stall_diag_report_event(void)
+{
+    StallDiagResult event = motion_runtime_stall_diag_take_event();
+
+    if (event != STALL_DIAG_RESULT_IDLE)
+    {
+        stall_diag_report_pending = event;
     }
 }
 
@@ -222,6 +280,29 @@ static void track_test_report_event(void)
         track_result_snapshot.start_sample_count = g_track_test_start_sample_count;
         track_result_snapshot.start_left_total = g_track_test_start_left_total;
         track_result_snapshot.start_right_total = g_track_test_start_right_total;
+        track_result_snapshot.t10_start_release_mask = g_track_test_t10_start_release_mask;
+        track_result_snapshot.t10_start_release_sample_count =
+            g_track_test_t10_start_release_sample_count;
+        track_result_snapshot.t10_start_release_left_total =
+            g_track_test_t10_start_release_left_total;
+        track_result_snapshot.t10_start_release_right_total =
+            g_track_test_t10_start_release_right_total;
+        if (track_result_snapshot.t10_start_release_sample_count == 0U)
+        {
+            track_result_snapshot.t10_start_release_sample_count =
+                g_track_test_start_sample_count;
+            track_result_snapshot.t10_start_release_left_total =
+                g_track_test_start_left_total;
+            track_result_snapshot.t10_start_release_right_total =
+                g_track_test_start_right_total;
+        }
+        track_result_snapshot.t10_start_stage = g_track_test_t10_start_stage;
+        track_result_snapshot.t10_start_peak_pwm =
+            g_track_test_t10_start_peak_pwm;
+        track_result_snapshot.t10_right_start_stage =
+            g_track_test_t10_right_start_stage;
+        track_result_snapshot.t10_right_start_peak_pwm =
+            g_track_test_t10_right_start_peak_pwm;
         track_result_snapshot.left_pwm_final = motion_runtime_track_test_left_pwm_final();
         track_result_snapshot.right_pwm_final = motion_runtime_track_test_right_pwm_final();
         track_result_snapshot.left_saturation_count = g_motor_left_saturation_count;
@@ -235,6 +316,16 @@ static void track_test_report_event(void)
         track_result_snapshot.t12_start_release_sample_count = g_track_t12_start_release_sample_count;
         track_result_snapshot.t12_start_release_left_total = g_track_t12_start_release_left_total;
         track_result_snapshot.t12_start_release_right_total = g_track_t12_start_release_right_total;
+        track_result_snapshot.t12_approach_max_sum = g_track_t12_approach_max_sum;
+        track_result_snapshot.t12_approach_max_error_x1000 = g_track_t12_approach_max_error_x1000;
+        track_result_snapshot.t12_approach_max_side_diff = g_track_t12_approach_max_side_diff;
+        track_result_snapshot.t12_entry_source = g_track_t12_entry_source;
+        track_result_snapshot.t12_entry_norm_l = g_track_t12_entry_norm_l;
+        track_result_snapshot.t12_entry_norm_lm = g_track_t12_entry_norm_lm;
+        track_result_snapshot.t12_entry_norm_rm = g_track_t12_entry_norm_rm;
+        track_result_snapshot.t12_entry_norm_r = g_track_t12_entry_norm_r;
+        track_result_snapshot.t12_entry_error_x1000 = g_track_t12_entry_error_x1000;
+        track_result_snapshot.t12_entry_sum = g_track_t12_entry_sum;
         track_result_snapshot.t12_exit_trigger_mask = g_track_t12_exit_trigger_mask;
         track_result_snapshot.t12_exit_angle_x10 = g_track_t12_exit_angle_x10;
         track_result_snapshot.t12_exit_half_ticks = g_track_t12_exit_half_ticks;
@@ -351,11 +442,19 @@ static void guide_send_reply(const char *reply)
 #endif
 }
 
+static void i4_stream_stop(void)
+{
+    i4_diagnostic_pending = 0U;
+    i4_stream_enabled = 0U;
+    i4_stream_loop_count = 0U;
+}
+
 static void guide_prepare_imu_service(void)
 {
 	motion_runtime_track_test_stop();
 	motion_runtime_encoder_test_stop();
 	motion_runtime_motor_test_stop();
+	motion_runtime_stall_diag_stop();
     motion_runtime_set_run_unlocked(0U);
     element4_set_enabled(0U);
     negative_pressure_set_enabled(0U);
@@ -364,6 +463,7 @@ static void guide_prepare_imu_service(void)
     pwm_state = 0U;
     Pwmout = 0U;
     motion_runtime_force_stop();
+    i4_stream_stop();
 }
 
 static uint8 imu_init_with_retry(void)
@@ -449,11 +549,117 @@ static void guide_send_motor_test_started(MotorTestSide side)
     guide_send_reply((const char *)guide_reply_buffer);
 }
 
-static void guide_send_track_test_started(uint8 mode)
+static void guide_send_stall_diag_started(MotorTestSide side)
 {
-    guide_send_reply(mode == TRACK_TEST_MODE_T12
-        ? "OK:TTEST Z09-10/T12R8 V120 T3000 E22 P25.5 F150 R30 X13/100 A170/200 BK600 B70/55 LP25\r\n"
-        : "OK:TTEST Z07/T10R8 V215 T3000 P15 N300/M80 R500 BK600\r\n");
+    uint32 reply_length;
+    const int8 *side_text = side == MOTOR_TEST_SIDE_LEFT
+        ? (const int8 *)"L"
+        : (side == MOTOR_TEST_SIDE_RIGHT
+            ? (const int8 *)"R"
+            : (const int8 *)"B");
+    const int8 *sequence_text = side == MOTOR_TEST_SIDE_BOTH
+        ? (const int8 *)"L>R" : side_text;
+
+    reply_length = zf_sprintf(
+        guide_reply_buffer,
+        (const int8 *)"OK:STALL TEST %s PWM=600/1000/1400 PRE=%u STEP=%uMS SEQ=%s\r\n",
+        side_text,
+        (uint32)STALL_DIAG_PRECHECK_MS,
+        (uint32)STALL_DIAG_STAGE_MS,
+        sequence_text);
+    if (reply_length >= GUIDE_REPLY_SIZE)
+    {
+        reply_length = GUIDE_REPLY_SIZE - 1U;
+    }
+    guide_reply_buffer[reply_length] = '\0';
+    guide_send_reply((const char *)guide_reply_buffer);
+}
+
+static void guide_start_stall_diag(MotorTestSide side)
+{
+    i4_stream_stop();
+    motion_runtime_track_test_stop();
+    motion_runtime_encoder_test_stop();
+    motion_runtime_motor_test_stop();
+    motion_runtime_stall_diag_stop();
+    pwm_state = 0U;
+    Pwmout = 0U;
+    change_speed_Target_base(0);
+    reset_motion_pid_state();
+    motion_runtime_force_stop();
+
+    if (g_motion_run_unlocked)
+    {
+        guide_send_reply("ERR:STALL RUNLOCK\r\n");
+    }
+    else if (element4_is_enabled())
+    {
+        guide_send_reply("ERR:STALL ELEM\r\n");
+    }
+    else if (negative_pressure_enabled
+             || negative_pressure_armed
+             || negative_pressure_state != NEGATIVE_PRESSURE_STATE_OFF
+             || negative_pressure_real_output_percent != 0U)
+    {
+        guide_send_reply("ERR:STALL FAN\r\n");
+    }
+    else if (g_imu_runtime_state != IMU_RUNTIME_READY)
+    {
+        guide_send_reply("ERR:STALL IMU\r\n");
+    }
+    else if (g_motion_protect_reason != MOTION_PROTECT_NONE)
+    {
+        guide_send_reply("ERR:STALL SAFE;CLEAR\r\n");
+    }
+    else if (motion_runtime_encoder_mode_mask() != 0x03U)
+    {
+        guide_send_reply("ERR:STALL ENCMODE\r\n");
+    }
+    else if (motion_runtime_stall_diag_start(side))
+    {
+        stall_diag_status_pending = 0U;
+        stall_diag_report_pending = STALL_DIAG_RESULT_IDLE;
+        guide_send_stall_diag_started(side);
+    }
+    else
+    {
+        guide_send_reply("ERR:STALL STATE\r\n");
+    }
+}
+
+static void guide_send_track_test_started(uint8 mode, int8 force_direction)
+{
+    uint32 reply_length;
+    const int8 *mode_text;
+
+    if (!motion_runtime_motor_test_both_passed())
+    {
+        guide_send_reply(
+            "WARN:TTEST MTESTB=SKIPPED RUNTIME_PROTECT=ON\r\n");
+    }
+
+    if (mode != TRACK_TEST_MODE_T12)
+    {
+        guide_send_reply(
+            "OK:TTEST Z07/T10R8 V180 T3000 P12 N300/M80 R0 BK0 M=AUTO\r\n");
+        return;
+    }
+
+    mode_text = force_direction < 0
+        ? (const int8 *)"FORCE-R"
+        : (force_direction > 0
+            ? (const int8 *)"FORCE-L"
+            : (const int8 *)"AUTO");
+    reply_length = zf_sprintf(
+        guide_reply_buffer,
+        (const int8 *)"OK:TTEST Z09-10/T12R8 V120 T3000 E22 P22/28.5/16 F240 T110/170 R30 X8/150 A160/195 BK600 B70/55 LP25 M=%s\r\n",
+        mode_text);
+    if (reply_length >= GUIDE_REPLY_SIZE)
+    {
+        reply_length = GUIDE_REPLY_SIZE - 1U;
+    }
+    guide_reply_buffer[reply_length] = '\0';
+    guide_send_reply((const char *)guide_reply_buffer);
 }
 
 static void guide_send_runtime_config(void)
@@ -478,7 +684,11 @@ static void guide_send_runtime_config(void)
     guide_send_reply((const char *)guide_reply_buffer);
 
     guide_send_reply(
-        "CFG2:RACE8 T10V215 T12V120 T3000 L150 R500 P25.5 X13/100 A170/200 BK600 B70/55 LP25\r\n");
+        "CFG2:RACE8 T10V180 T12V120 T3000 L120 R500 P22/28.5/16 T110/170 X8/150 A160/195 BK600 B70/55 LP25\r\n");
+    guide_send_reply(
+        "CFG3:STALL P600/1000/1400 PRE50 STEP100 MOV=N8/PK2 SEQ=LR MTEST=OPT\r\n");
+    guide_send_reply(
+        "CFG4:T10=L1400/1700/2000 R600/1000/1400 @200/300 R10 M=N8/RAW2X2 REL60 BLEND100 FB=ABS P12\r\n");
 }
 
 static const int8 *guide_track_test_precheck(void)
@@ -527,10 +737,6 @@ static const int8 *guide_track_test_precheck(void)
     if (!inductance4_line_is_present())
     {
         return (const int8 *)"LINE";
-    }
-    if (!motion_runtime_motor_test_both_passed())
-    {
-        return (const int8 *)"MTESTB";
     }
     return NULL;
 }
@@ -1008,27 +1214,39 @@ static void guide_process_command(void)
                 "OK:SCOPE Z07/T10TRACK ARM=2000MS BIN=V2/8CH/50HZ TRESULT=AFTER\r\n");
         }
     }
-    else if (guide_command_equals((const int8 *)"TTEST T12")
+    else if (guide_command_equals((const int8 *)"TTEST T12 FORCE R")
+             || guide_command_equals((const int8 *)"TTEST T12 FORCE L")
+             || guide_command_equals((const int8 *)"TTEST T12")
              || guide_command_equals((const int8 *)"TTEST"))
     {
         const int8 *reason;
         uint8 track_mode;
+        int8 force_direction;
 
-        track_mode = guide_command_equals((const int8 *)"TTEST T12")
+        track_mode = guide_command_equals((const int8 *)"TTEST T12 FORCE R")
+            || guide_command_equals((const int8 *)"TTEST T12 FORCE L")
+            || guide_command_equals((const int8 *)"TTEST T12")
             ? TRACK_TEST_MODE_T12
             : TRACK_TEST_MODE_T10;
+        force_direction = guide_command_equals((const int8 *)"TTEST T12 FORCE R")
+            ? -1
+            : (guide_command_equals((const int8 *)"TTEST T12 FORCE L")
+                ? 1
+                : 0);
 
 		motion_runtime_encoder_test_stop();
 		motion_runtime_motor_test_stop();
 		pwm_state = 0U;
 		Pwmout = 0U;
 		change_speed_Target_base(0);
-		reset_motion_pid_state();
-		motion_runtime_force_stop();
+        reset_motion_pid_state();
+        motion_runtime_force_stop();
+        motion_runtime_set_track_test_t12_force_direction(force_direction);
 
         reason = guide_track_test_precheck();
         if (reason != NULL)
         {
+            motion_runtime_set_track_test_t12_force_direction(0);
             guide_send_ttest_error(reason);
         }
         else
@@ -1044,7 +1262,7 @@ static void guide_process_command(void)
             if (motion_runtime_track_test_start_mode(track_mode))
             {
                 interrupt_global_enable();
-                guide_send_track_test_started(track_mode);
+                guide_send_track_test_started(track_mode, force_direction);
             }
             else
             {
@@ -1254,9 +1472,11 @@ static void guide_process_command(void)
 {
     if (guide_command_equals((const int8 *)"STOP"))
     {
+        i4_stream_stop();
         motion_runtime_track_test_stop();
         motion_runtime_encoder_test_stop();
         motion_runtime_motor_test_stop();
+        motion_runtime_stall_diag_stop();
         pwm_state = 0U;
         Pwmout = 0U;
         reset_motion_pid_state();
@@ -1268,6 +1488,7 @@ static void guide_process_command(void)
         motion_runtime_track_test_stop();
         motion_runtime_encoder_test_stop();
         motion_runtime_motor_test_stop();
+        motion_runtime_stall_diag_stop();
         if (motion_runtime_clear_protection())
         {
             guide_send_reply("OK:CLEAR LOCK=1\r\n");
@@ -1312,33 +1533,105 @@ static void guide_process_command(void)
         motion_runtime_track_test_stop();
         motion_runtime_encoder_test_stop();
         motion_runtime_motor_test_stop();
+        motion_runtime_stall_diag_stop();
         element4_set_enabled(0U);
         guide_send_reply("OK:ELEMENTS OFF\r\n");
     }
+    else if (guide_command_equals((const int8 *)"I4 STREAM ON"))
+    {
+        if (motion_runtime_motor_test_is_active()
+            || motion_runtime_encoder_test_is_active()
+            || motion_runtime_track_test_is_active()
+            || motion_runtime_stall_diag_is_active())
+        {
+            guide_send_reply("ERR:I4 BUSY\r\n");
+        }
+        else
+        {
+            i4_stream_enabled = 1U;
+            i4_stream_loop_count = I4_STREAM_PERIOD_LOOPS;
+            guide_send_reply("OK:I4 STREAM ON\r\n");
+        }
+    }
+    else if (guide_command_equals((const int8 *)"I4 STREAM OFF"))
+    {
+        i4_stream_stop();
+        guide_send_reply("OK:I4 STREAM OFF\r\n");
+    }
+    else if (guide_command_equals((const int8 *)"I4"))
+    {
+        if (motion_runtime_motor_test_is_active()
+            || motion_runtime_encoder_test_is_active()
+            || motion_runtime_track_test_is_active()
+            || motion_runtime_stall_diag_is_active())
+        {
+            guide_send_reply("ERR:I4 BUSY\r\n");
+        }
+        else
+        {
+            i4_diagnostic_pending = 1U;
+        }
+    }
+    else if (guide_command_equals((const int8 *)"STALL STATUS"))
+    {
+        stall_diag_status_pending = 1U;
+    }
+    else if (guide_command_equals((const int8 *)"STALL STOP"))
+    {
+        i4_stream_stop();
+        guide_send_reply(motion_runtime_stall_diag_stop()
+            ? "OK:STALL STOP DRIVER=OFF\r\n"
+            : "OK:STALL IDLE DRIVER=OFF\r\n");
+    }
+    else if (guide_command_equals((const int8 *)"STALL TEST L")
+             || guide_command_equals((const int8 *)"STALL TEST R")
+             || guide_command_equals((const int8 *)"STALL TEST B"))
+    {
+        MotorTestSide side = guide_command_equals((const int8 *)"STALL TEST L")
+            ? MOTOR_TEST_SIDE_LEFT
+            : (guide_command_equals((const int8 *)"STALL TEST R")
+                ? MOTOR_TEST_SIDE_RIGHT
+                : MOTOR_TEST_SIDE_BOTH);
+        guide_start_stall_diag(side);
+    }
     else if (guide_command_equals((const int8 *)"TTEST STOP"))
     {
+        i4_stream_stop();
         guide_send_reply(motion_runtime_track_test_stop()
             ? "OK:TTEST STOP LOCK=1\r\n"
             : "OK:TTEST IDLE\r\n");
     }
-    else if (guide_command_equals((const int8 *)"TTEST T12")
+    else if (guide_command_equals((const int8 *)"TTEST T12 FORCE R")
+             || guide_command_equals((const int8 *)"TTEST T12 FORCE L")
+             || guide_command_equals((const int8 *)"TTEST T12")
              || guide_command_equals((const int8 *)"TTEST"))
     {
         const int8 *reason;
-        uint8 track_mode = guide_command_equals((const int8 *)"TTEST T12")
+        uint8 track_mode = guide_command_equals((const int8 *)"TTEST T12 FORCE R")
+            || guide_command_equals((const int8 *)"TTEST T12 FORCE L")
+            || guide_command_equals((const int8 *)"TTEST T12")
             ? TRACK_TEST_MODE_T12
             : TRACK_TEST_MODE_T10;
+        int8 force_direction = guide_command_equals((const int8 *)"TTEST T12 FORCE R")
+            ? -1
+            : (guide_command_equals((const int8 *)"TTEST T12 FORCE L")
+                ? 1
+                : 0);
 
+        i4_stream_stop();
         motion_runtime_encoder_test_stop();
         motion_runtime_motor_test_stop();
+        motion_runtime_stall_diag_stop();
         pwm_state = 0U;
         Pwmout = 0U;
         change_speed_Target_base(0);
         reset_motion_pid_state();
         motion_runtime_force_stop();
+        motion_runtime_set_track_test_t12_force_direction(force_direction);
         reason = guide_track_test_precheck();
         if (reason != NULL)
         {
+            motion_runtime_set_track_test_t12_force_direction(0);
             guide_send_ttest_error(reason);
         }
         else
@@ -1346,7 +1639,7 @@ static void guide_process_command(void)
             track_result_valid = 0U;
             if (motion_runtime_track_test_start_mode(track_mode))
             {
-                guide_send_track_test_started(track_mode);
+                guide_send_track_test_started(track_mode, force_direction);
             }
             else
             {
@@ -1354,17 +1647,41 @@ static void guide_process_command(void)
             }
         }
     }
+    else if (guide_command_equals((const int8 *)"STALL STATUS"))
+    {
+        stall_diag_status_pending = 1U;
+    }
+    else if (guide_command_equals((const int8 *)"STALL STOP"))
+    {
+        guide_send_reply(motion_runtime_stall_diag_stop()
+            ? "OK:STALL STOP DRIVER=OFF\r\n"
+            : "OK:STALL IDLE DRIVER=OFF\r\n");
+    }
+    else if (guide_command_equals((const int8 *)"STALL TEST L")
+             || guide_command_equals((const int8 *)"STALL TEST R")
+             || guide_command_equals((const int8 *)"STALL TEST B"))
+    {
+        MotorTestSide side = guide_command_equals((const int8 *)"STALL TEST L")
+            ? MOTOR_TEST_SIDE_LEFT
+            : (guide_command_equals((const int8 *)"STALL TEST R")
+                ? MOTOR_TEST_SIDE_RIGHT
+                : MOTOR_TEST_SIDE_BOTH);
+        guide_start_stall_diag(side);
+    }
     else if (guide_command_equals((const int8 *)"MTEST STOP"))
     {
+        i4_stream_stop();
         guide_send_reply(motion_runtime_motor_test_stop()
             ? "OK:MTEST STOP\r\n"
             : "OK:MTEST IDLE\r\n");
     }
     else if (guide_command_equals((const int8 *)"MTEST B"))
     {
+        i4_stream_stop();
         motion_runtime_track_test_stop();
         motion_runtime_encoder_test_stop();
         motion_runtime_motor_test_stop();
+        motion_runtime_stall_diag_stop();
         pwm_state = 0U;
         Pwmout = 0U;
         reset_motion_pid_state();
@@ -1475,6 +1792,10 @@ static const int8 *diagnostic_motor_text(void)
     {
         return (const int8 *)"PROTECT";
     }
+    if (motion_runtime_stall_diag_is_active())
+    {
+        return (const int8 *)"STALL";
+    }
     if (motion_runtime_motor_test_is_active())
     {
         return (const int8 *)"MTEST";
@@ -1500,6 +1821,22 @@ static const int8 *diagnostic_motor_text(void)
         return (const int8 *)"RUN";
     }
     return (const int8 *)"STOP";
+}
+
+static void diagnostic_refresh_adc_mask(void)
+{
+    diagnostic_adc_mask = 0U;
+
+    for (diagnostic_channel = 0U;
+         diagnostic_channel < INDUCTANCE4_CHANNEL_COUNT;
+         diagnostic_channel++)
+    {
+        if (g_inductance4[diagnostic_channel].filtered > 4U
+            && g_inductance4[diagnostic_channel].filtered < 4091U)
+        {
+            diagnostic_adc_mask |= (uint8)(1U << diagnostic_channel);
+        }
+    }
 }
 
 static void diagnostic_append_u32(const int8 *label, uint32 value)
@@ -1600,7 +1937,10 @@ static uint8 send_compact_status_frame(void)
                            element4_is_enabled()
                                ? (const int8 *)"ON"
                                : (const int8 *)"OFF");
-    diagnostic_append_text((const int8 *)" STREAM=", (const int8 *)"OFF");
+    diagnostic_append_text((const int8 *)" STREAM=",
+                           i4_stream_enabled
+                               ? (const int8 *)"I4"
+                               : (const int8 *)"OFF");
     diagnostic_append_u32((const int8 *)" RUNLOCK=",
                           (uint32)!g_motion_run_unlocked);
     diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
@@ -1653,6 +1993,184 @@ static uint8 send_compact_status_frame(void)
     diagnostic_append_text((const int8 *)" ADC=", diagnostic_adc_text());
     diagnostic_append_u32((const int8 *)" MASK=", (uint32)diagnostic_adc_mask);
     diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+    if (diagnostic_send_offset >= DIAGNOSTIC_TX_BUFFER_SIZE)
+    {
+        return 0U;
+    }
+    uart_write_buffer(
+        WIRELESS_UART_INDEX,
+        (uint8 *)diagnostic_tx_buffer,
+        diagnostic_send_offset);
+    return 1U;
+}
+
+static uint8 send_i4_diagnostic_frame(void)
+{
+    if (gpio_get_level(WIRELESS_UART_RTS_PIN))
+    {
+        return 0U;
+    }
+
+    diagnostic_refresh_adc_mask();
+    diagnostic_send_offset = 0U;
+    diagnostic_append_u32((const int8 *)"I4 RAW:L=",
+                          (uint32)g_inductance4[INDUCTANCE4_L].filtered);
+    diagnostic_append_u32((const int8 *)" LM=",
+                          (uint32)g_inductance4[INDUCTANCE4_LM].filtered);
+    diagnostic_append_u32((const int8 *)" RM=",
+                          (uint32)g_inductance4[INDUCTANCE4_RM].filtered);
+    diagnostic_append_u32((const int8 *)" R=",
+                          (uint32)g_inductance4[INDUCTANCE4_R].filtered);
+    diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+    diagnostic_append_i32((const int8 *)"I4 NORM:L=",
+                          (int32)g_inductance4[INDUCTANCE4_L].normalized);
+    diagnostic_append_i32((const int8 *)" LM=",
+                          (int32)g_inductance4[INDUCTANCE4_LM].normalized);
+    diagnostic_append_i32((const int8 *)" RM=",
+                          (int32)g_inductance4[INDUCTANCE4_RM].normalized);
+    diagnostic_append_i32((const int8 *)" R=",
+                          (int32)g_inductance4[INDUCTANCE4_R].normalized);
+    diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+    diagnostic_append_u32((const int8 *)"I4 STATE:SUM=",
+                          (uint32)inductance4_get_line_sum());
+    diagnostic_append_i32((const int8 *)" ERR_X1000=",
+                          (int32)(inductance4_calculate_error() * 1000.0f));
+    diagnostic_append_text((const int8 *)" LINE=", diagnostic_line_text());
+    diagnostic_append_text((const int8 *)" ADC=", diagnostic_adc_text());
+    diagnostic_append_u32((const int8 *)" MASK=", (uint32)diagnostic_adc_mask);
+    diagnostic_append_text((const int8 *)" CAL=",
+                           inductance4_calibration_valid
+                               ? (const int8 *)"OK"
+                               : (const int8 *)"BAD");
+    diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+    if (diagnostic_send_offset >= DIAGNOSTIC_TX_BUFFER_SIZE)
+    {
+        return 0U;
+    }
+    uart_write_buffer(
+        WIRELESS_UART_INDEX,
+        (uint8 *)diagnostic_tx_buffer,
+        diagnostic_send_offset);
+    return 1U;
+}
+
+static uint8 send_stall_diag_status_frame(void)
+{
+    if (gpio_get_level(WIRELESS_UART_RTS_PIN))
+    {
+        return 0U;
+    }
+
+    diagnostic_send_offset = 0U;
+    diagnostic_append_text((const int8 *)"STS:Q=",
+        (const int8 *)motion_runtime_stall_diag_requested_side_text());
+    diagnostic_append_text((const int8 *)" A=",
+        (const int8 *)motion_runtime_stall_diag_active_side_text());
+    diagnostic_append_text((const int8 *)" R=",
+        stall_diag_result_text(motion_runtime_stall_diag_result()));
+    diagnostic_append_u32((const int8 *)" ST=",
+        (uint32)motion_runtime_stall_diag_stage());
+    diagnostic_append_u32((const int8 *)" PWM=",
+        (uint32)motion_runtime_stall_diag_applied_pwm());
+    diagnostic_append_u32((const int8 *)" PM=",
+        (uint32)motion_runtime_stall_diag_pass_mask());
+    diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+    diagnostic_append_u32((const int8 *)"STE:L=",
+        motion_runtime_stall_diag_left_total());
+    diagnostic_append_u32((const int8 *)" R=",
+        motion_runtime_stall_diag_right_total());
+    diagnostic_append_u32((const int8 *)" LP=",
+        (uint32)motion_runtime_stall_diag_left_peak());
+    diagnostic_append_u32((const int8 *)" RP=",
+        (uint32)motion_runtime_stall_diag_right_peak());
+    diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+    diagnostic_append_u32((const int8 *)"STB:LBP=",
+        (uint32)motion_runtime_stall_diag_left_breakaway_pwm());
+    diagnostic_append_u32((const int8 *)" RBP=",
+        (uint32)motion_runtime_stall_diag_right_breakaway_pwm());
+    diagnostic_append_text((const int8 *)" P=",
+        (const int8 *)motion_runtime_protect_reason_text());
+    diagnostic_append_text((const int8 *)" DRIVER=",
+        motion_runtime_stall_diag_is_active()
+            && motion_runtime_stall_diag_applied_pwm() > 0U
+            ? (const int8 *)"ON" : (const int8 *)"OFF");
+    diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+    if (diagnostic_send_offset >= DIAGNOSTIC_TX_BUFFER_SIZE)
+    {
+        return 0U;
+    }
+    uart_write_buffer(
+        WIRELESS_UART_INDEX,
+        (uint8 *)diagnostic_tx_buffer,
+        diagnostic_send_offset);
+    return 1U;
+}
+
+static uint8 send_stall_diag_result_frame(StallDiagResult result)
+{
+    if (gpio_get_level(WIRELESS_UART_RTS_PIN))
+    {
+        return 0U;
+    }
+
+    diagnostic_send_offset = 0U;
+    diagnostic_append_text((const int8 *)"SDR:Q=",
+        (const int8 *)motion_runtime_stall_diag_requested_side_text());
+    diagnostic_append_text((const int8 *)" A=",
+        (const int8 *)motion_runtime_stall_diag_active_side_text());
+    diagnostic_append_text((const int8 *)" R=",
+        stall_diag_result_text(result));
+    diagnostic_append_u32((const int8 *)" ST=",
+        (uint32)motion_runtime_stall_diag_stage());
+    diagnostic_append_u32((const int8 *)" PWM=",
+        (uint32)motion_runtime_stall_diag_applied_pwm());
+    diagnostic_append_u32((const int8 *)" PM=",
+        (uint32)motion_runtime_stall_diag_pass_mask());
+    diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+    diagnostic_append_u32((const int8 *)"SDE:L=",
+        motion_runtime_stall_diag_left_total());
+    diagnostic_append_u32((const int8 *)" R=",
+        motion_runtime_stall_diag_right_total());
+    diagnostic_append_u32((const int8 *)" LP=",
+        (uint32)motion_runtime_stall_diag_left_peak());
+    diagnostic_append_u32((const int8 *)" RP=",
+        (uint32)motion_runtime_stall_diag_right_peak());
+    diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+    diagnostic_append_u32((const int8 *)"SDB:LBP=",
+        (uint32)motion_runtime_stall_diag_left_breakaway_pwm());
+    diagnostic_append_u32((const int8 *)" RBP=",
+        (uint32)motion_runtime_stall_diag_right_breakaway_pwm());
+    diagnostic_append_text((const int8 *)" P=",
+        (const int8 *)motion_runtime_protect_reason_text());
+    diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+
+    if (result == STALL_DIAG_RESULT_PASS)
+    {
+        diagnostic_append_text(
+            (const int8 *)"ACT:DONE DRIVER=OFF",
+            (const int8 *)"\r\n");
+    }
+    else if (result == STALL_DIAG_RESULT_STOPPED)
+    {
+        diagnostic_append_text(
+            (const int8 *)"ACT:STOP DRIVER=OFF",
+            (const int8 *)"\r\n");
+    }
+    else
+    {
+        diagnostic_append_text(
+            (const int8 *)"ACT:FAIL DRIVER=OFF CHECK/CLEAR",
+            (const int8 *)"\r\n");
+    }
 
     if (diagnostic_send_offset >= DIAGNOSTIC_TX_BUFFER_SIZE)
     {
@@ -1774,6 +2292,36 @@ static uint8 send_track_test_result_frame(TrackTestResult result)
 
     if (track_result_snapshot.mode == TRACK_TEST_MODE_T12)
     {
+        diagnostic_append_u32((const int8 *)"T12A:SUM=",
+                              (uint32)track_result_snapshot.t12_approach_max_sum);
+        diagnostic_append_u32((const int8 *)" EABS=",
+                              (uint32)track_result_snapshot.t12_approach_max_error_x1000);
+        diagnostic_append_u32((const int8 *)" D=",
+                              (uint32)track_result_snapshot.t12_approach_max_side_diff);
+        diagnostic_append_text((const int8 *)"",
+                               (const int8 *)"\r\n");
+
+        diagnostic_append_text((const int8 *)"T12E:M=",
+            track_result_snapshot.t12_entry_source == TRACK_T12_ENTRY_SOURCE_FORCE
+                ? (track_result_snapshot.t12_direction < 0
+                    ? (const int8 *)"FORCE-R"
+                    : (const int8 *)"FORCE-L")
+                : (const int8 *)"AUTO");
+        diagnostic_append_u32((const int8 *)" L=",
+                              (uint32)track_result_snapshot.t12_entry_norm_l);
+        diagnostic_append_u32((const int8 *)" LM=",
+                              (uint32)track_result_snapshot.t12_entry_norm_lm);
+        diagnostic_append_u32((const int8 *)" RM=",
+                              (uint32)track_result_snapshot.t12_entry_norm_rm);
+        diagnostic_append_u32((const int8 *)" R=",
+                              (uint32)track_result_snapshot.t12_entry_norm_r);
+        diagnostic_append_i32((const int8 *)" E=",
+                              (int32)track_result_snapshot.t12_entry_error_x1000);
+        diagnostic_append_u32((const int8 *)" S=",
+                              (uint32)track_result_snapshot.t12_entry_sum);
+        diagnostic_append_text((const int8 *)"",
+                               (const int8 *)"\r\n");
+
         diagnostic_append_u32((const int8 *)"T12S:K=",
                               (uint32)track_result_snapshot.t12_start_release_reason);
         diagnostic_append_u32((const int8 *)" N=",
@@ -1822,6 +2370,26 @@ static uint8 send_track_test_result_frame(TrackTestResult result)
                               (int32)track_result_snapshot.t12_post_error_x1000);
         diagnostic_append_u32((const int8 *)" S=",
                               (uint32)track_result_snapshot.t12_post_sum);
+        diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
+    }
+    else
+    {
+        diagnostic_append_u32((const int8 *)"T10S:M=",
+                              (uint32)track_result_snapshot.t10_start_release_mask);
+        diagnostic_append_u32((const int8 *)" N=",
+                              (uint32)track_result_snapshot.t10_start_release_sample_count);
+        diagnostic_append_u32((const int8 *)" L=",
+                              track_result_snapshot.t10_start_release_left_total);
+        diagnostic_append_u32((const int8 *)" R=",
+                              track_result_snapshot.t10_start_release_right_total);
+        diagnostic_append_u32((const int8 *)" LS=",
+                              (uint32)track_result_snapshot.t10_start_stage);
+        diagnostic_append_u32((const int8 *)" LP=",
+                              (uint32)track_result_snapshot.t10_start_peak_pwm);
+        diagnostic_append_u32((const int8 *)" RS=",
+                              (uint32)track_result_snapshot.t10_right_start_stage);
+        diagnostic_append_u32((const int8 *)" RP=",
+                              (uint32)track_result_snapshot.t10_right_start_peak_pwm);
         diagnostic_append_text((const int8 *)"", (const int8 *)"\r\n");
     }
 
@@ -2140,19 +2708,7 @@ static void upload_inductance_diagnostics(void)
     }
 #endif
 
-    diagnostic_adc_mask = 0U;
-
-    for (diagnostic_channel = 0U;
-         diagnostic_channel < INDUCTANCE4_CHANNEL_COUNT;
-         diagnostic_channel++)
-    {
-        if (g_inductance4[diagnostic_channel].filtered > 4U
-            && g_inductance4[diagnostic_channel].filtered < 4091U)
-        {
-            diagnostic_adc_mask |= (uint8)(1U << diagnostic_channel);
-        }
-
-    }
+    diagnostic_refresh_adc_mask();
 #if !RACE_MINIMAL_BUILD
     if (encoder_test_report_pending != ENCODER_TEST_RESULT_IDLE)
     {
@@ -2163,6 +2719,22 @@ static void upload_inductance_diagnostics(void)
         return;
     }
 #endif
+    if (stall_diag_report_pending != STALL_DIAG_RESULT_IDLE)
+    {
+        if (send_stall_diag_result_frame(stall_diag_report_pending))
+        {
+            stall_diag_report_pending = STALL_DIAG_RESULT_IDLE;
+        }
+        return;
+    }
+    if (stall_diag_status_pending)
+    {
+        if (send_stall_diag_status_frame())
+        {
+            stall_diag_status_pending = 0U;
+        }
+        return;
+    }
     if (motor_test_report_pending != MOTOR_TEST_RESULT_IDLE)
     {
         if (send_motor_test_result_frame(motor_test_report_pending))
@@ -2176,6 +2748,24 @@ static void upload_inductance_diagnostics(void)
         if (send_track_test_result_frame(track_test_report_pending))
         {
             track_test_report_pending = TRACK_TEST_RESULT_IDLE;
+        }
+        return;
+    }
+
+    if (motion_runtime_motor_test_is_active()
+        || motion_runtime_encoder_test_is_active()
+        || motion_runtime_track_test_is_active()
+        || motion_runtime_stall_diag_is_active())
+    {
+        return;
+    }
+
+    if (i4_diagnostic_pending)
+    {
+        if (send_i4_diagnostic_frame())
+        {
+            i4_diagnostic_pending = 0U;
+            i4_stream_loop_count = 0U;
         }
         return;
     }
@@ -2198,6 +2788,21 @@ static void upload_inductance_diagnostics(void)
             diagnostic_compact_pending = 0U;
         }
         return;
+    }
+
+    if (i4_stream_enabled)
+    {
+        if (i4_stream_loop_count >= I4_STREAM_PERIOD_LOOPS)
+        {
+            if (send_i4_diagnostic_frame())
+            {
+                i4_stream_loop_count = 0U;
+            }
+        }
+        else
+        {
+            i4_stream_loop_count++;
+        }
     }
 
 }
@@ -2240,9 +2845,8 @@ void main()
 //			}
 		
 	// ASCII-cleaned legacy comment.
-#if !RACE_MINIMAL_BUILD
 		lcd_init();
-#endif
+		lcd_clear(WHITE);
 		delay_init();
 		
 
@@ -2292,10 +2896,21 @@ void main()
 	while(1)
 	{
 			#if RACE_MINIMAL_BUILD
+			stall_diag_report_event();
 			motor_test_report_event();
 			track_test_report_event();
 			upload_inductance_diagnostics();
-			if (motor_test_report_pending == MOTOR_TEST_RESULT_IDLE
+			if (i4_lcd_loop_count >= I4_LCD_PERIOD_LOOPS)
+			{
+				display_inductance4_diagnostic();
+				i4_lcd_loop_count = 0U;
+			}
+			else
+			{
+				i4_lcd_loop_count++;
+			}
+			if (stall_diag_report_pending == STALL_DIAG_RESULT_IDLE
+				&& motor_test_report_pending == MOTOR_TEST_RESULT_IDLE
 				&& track_test_report_pending == TRACK_TEST_RESULT_IDLE)
 			{
 				guide_poll_commands();
@@ -2303,12 +2918,14 @@ void main()
 			delay_ms(2);
 			#else
 
+			stall_diag_report_event();
 			encoder_test_report_event();
 			motor_test_report_event();
 			track_test_report_event();
             scope_service_arm();
             upload_inductance_diagnostics();
-            if (encoder_test_report_pending == ENCODER_TEST_RESULT_IDLE
+            if (stall_diag_report_pending == STALL_DIAG_RESULT_IDLE
+                && encoder_test_report_pending == ENCODER_TEST_RESULT_IDLE
                 && motor_test_report_pending == MOTOR_TEST_RESULT_IDLE
                 && track_test_report_pending == TRACK_TEST_RESULT_IDLE)
             {

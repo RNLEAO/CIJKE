@@ -9,6 +9,8 @@ static uint16 xdata format_divisor;
 static uint8 xdata format_index;
 static uint8 xdata sensor_line_offset;
 static uint8 xdata sensor_signal_ok;
+static uint8 xdata diagnostic_adc_mask;
+static uint8 xdata diagnostic_channel;
 
 static void append_fixed_uint(char *line, uint8 *offset, uint16 value, uint8 digits)
 {
@@ -49,6 +51,41 @@ void display_inductance4_data(void)
     show_sensor_row(34U, "LM", INDUCTANCE4_LM);
     show_sensor_row(66U, "RM", INDUCTANCE4_RM);
     show_sensor_row(98U, "R ", INDUCTANCE4_R);
+}
+
+void display_inductance4_diagnostic(void)
+{
+    diagnostic_adc_mask = 0U;
+    for (diagnostic_channel = 0U;
+         diagnostic_channel < INDUCTANCE4_CHANNEL_COUNT;
+         diagnostic_channel++)
+    {
+        if (g_inductance4[diagnostic_channel].filtered > 4U
+            && g_inductance4[diagnostic_channel].filtered < 4091U)
+        {
+            diagnostic_adc_mask |= (uint8)(1U << diagnostic_channel);
+        }
+    }
+
+    display_inductance4_data();
+    ips114_show_string(144U, 2U, "SUM");
+    ips114_show_uint16(184U, 2U, inductance4_get_line_sum());
+    ips114_show_string(
+        144U,
+        18U,
+        inductance4_line_is_present() ? "LINE" : "LOST");
+    ips114_show_string(
+        144U,
+        34U,
+        diagnostic_adc_mask == 0x0FU ? "ADC OK " : "ADC BAD");
+    ips114_show_string(144U, 50U, "MASK");
+    ips114_show_uint16(184U, 50U, (uint16)diagnostic_adc_mask);
+    ips114_show_string(144U, 66U, "ERR");
+    ips114_show_float(168U, 66U, inductance4_calculate_error(), 1U, 3U);
+    ips114_show_string(
+        144U,
+        98U,
+        inductance4_calibration_valid ? "CAL OK " : "CAL BAD");
 }
 
 static void adjust_selected_parameter(uint8 selected, uint8 key_press)

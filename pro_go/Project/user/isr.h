@@ -53,10 +53,24 @@ void reset_track_test_exit_diagnostic(void);
 #define TRACK_T12_START_RELEASE_BALANCED 0x01U
 #define TRACK_T12_START_RELEASE_FALLBACK 0x02U
 
+#define TRACK_T12_ENTRY_SOURCE_NONE  0U
+#define TRACK_T12_ENTRY_SOURCE_AUTO  1U
+#define TRACK_T12_ENTRY_SOURCE_FORCE 2U
+
 extern volatile unsigned char xdata g_track_t12_start_release_reason;
 extern volatile unsigned int xdata g_track_t12_start_release_sample_count;
 extern volatile unsigned long xdata g_track_t12_start_release_left_total;
 extern volatile unsigned long xdata g_track_t12_start_release_right_total;
+extern volatile unsigned int xdata g_track_t12_approach_max_sum;
+extern volatile unsigned int xdata g_track_t12_approach_max_error_x1000;
+extern volatile unsigned int xdata g_track_t12_approach_max_side_diff;
+extern volatile unsigned char xdata g_track_t12_entry_source;
+extern volatile unsigned char xdata g_track_t12_entry_norm_l;
+extern volatile unsigned char xdata g_track_t12_entry_norm_lm;
+extern volatile unsigned char xdata g_track_t12_entry_norm_rm;
+extern volatile unsigned char xdata g_track_t12_entry_norm_r;
+extern volatile signed int xdata g_track_t12_entry_error_x1000;
+extern volatile unsigned int xdata g_track_t12_entry_sum;
 extern volatile unsigned char xdata g_track_t12_exit_trigger_mask;
 extern volatile unsigned int xdata g_track_t12_exit_angle_x10;
 extern volatile unsigned int xdata g_track_t12_exit_half_ticks;

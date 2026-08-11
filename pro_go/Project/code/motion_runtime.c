@@ -31,6 +31,12 @@
 #define MOTOR_TEST_RUNNING_RAW_MAX         2000U
 #define MOTOR_TEST_UNTESTED_RAW_MAX          20U
 #define MOTOR_TEST_ENCODER_MODE_MASK        0x03U
+#define STALL_DIAG_PRECHECK_TICKS  (STALL_DIAG_PRECHECK_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
+#define STALL_DIAG_STAGE_TICKS        (STALL_DIAG_STAGE_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
+#define STALL_DIAG_MOVE_TOTAL_MIN          8UL
+#define STALL_DIAG_MOVE_PEAK_MIN             2U
+#define STALL_DIAG_IDLE_RAW_MAX               4U
+#define STALL_DIAG_NOISE_FAULT_TICKS          3U
 #define ENCODER_TEST_DURATION_TICKS     (ENCODER_TEST_DURATION_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
 #define TRACK_TEST_DURATION_TICKS       (TRACK_TEST_DURATION_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
 #define TRACK_TEST_LINE_LOST_TICKS      (TRACK_TEST_LINE_LOST_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
@@ -38,6 +44,7 @@
 #if TRACK_TEST_START_ASSIST_ENABLED
 #define TRACK_TEST_TARGET_RAMP_TICKS    (TRACK_TEST_TARGET_RAMP_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
 #define TRACK_TEST_DECEL_RAMP_TICKS     (TRACK_TEST_DECEL_RAMP_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
+#define TRACK_TEST_T10_STEER_BLEND_TICKS (TRACK_TEST_T10_STEER_BLEND_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
 #endif
 #define TRACK_TEST_SPEED_KP                 5.9f
 #define TRACK_TEST_SPEED_KI                 0.50f
@@ -116,6 +123,24 @@ static volatile uint16 motor_test_left_peak = 0U;
 static volatile uint16 motor_test_right_peak = 0U;
 static volatile uint16 motor_test_left_idle_peak = 0U;
 static volatile uint16 motor_test_right_idle_peak = 0U;
+static volatile uint8 stall_diag_active = 0U;
+static volatile uint8 stall_diag_event = STALL_DIAG_RESULT_IDLE;
+static volatile uint8 stall_diag_requested_side = MOTOR_TEST_SIDE_NONE;
+static volatile uint8 stall_diag_active_side = MOTOR_TEST_SIDE_NONE;
+static volatile uint8 stall_diag_stage = 0U;
+static volatile uint8 stall_diag_stage_ticks_remaining = 0U;
+static volatile uint8 stall_diag_noise_ticks = 0U;
+static volatile uint8 stall_diag_pass_mask = 0U;
+static volatile uint8 g_stall_diag_result = STALL_DIAG_RESULT_IDLE;
+static volatile uint16 stall_diag_applied_pwm = 0U;
+static volatile uint32 stall_diag_active_total = 0UL;
+static volatile uint32 stall_diag_left_total = 0UL;
+static volatile uint32 stall_diag_right_total = 0UL;
+static volatile uint16 stall_diag_active_peak = 0U;
+static volatile uint16 stall_diag_left_peak = 0U;
+static volatile uint16 stall_diag_right_peak = 0U;
+static volatile uint16 stall_diag_left_breakaway_pwm = 0U;
+static volatile uint16 stall_diag_right_breakaway_pwm = 0U;
 static volatile uint8 encoder_test_active = 0U;
 static volatile uint8 encoder_test_event = ENCODER_TEST_RESULT_IDLE;
 static volatile uint32 encoder_test_left_total = 0U;
@@ -125,11 +150,20 @@ static volatile uint16 encoder_test_right_peak = 0U;
 volatile uint8 g_track_test_result = TRACK_TEST_RESULT_IDLE;
 volatile uint8 g_track_test_mode = TRACK_TEST_MODE_T10;
 volatile int8 g_track_test_t12_direction = 0;
+volatile int8 g_track_test_t12_force_direction = 0;
 volatile uint8 g_track_test_t12_half_active = 0U;
 volatile uint16 g_track_test_ticks_remaining = 0U;
 volatile uint16 g_track_test_start_sample_count = 0U;
 volatile uint32 g_track_test_start_left_total = 0U;
 volatile uint32 g_track_test_start_right_total = 0U;
+volatile uint8 g_track_test_t10_start_release_mask = 0U;
+volatile uint16 g_track_test_t10_start_release_sample_count = 0U;
+volatile uint32 g_track_test_t10_start_release_left_total = 0U;
+volatile uint32 g_track_test_t10_start_release_right_total = 0U;
+volatile uint8 g_track_test_t10_start_stage = 0U;
+volatile uint16 g_track_test_t10_start_peak_pwm = 0U;
+volatile uint8 g_track_test_t10_right_start_stage = 0U;
+volatile uint16 g_track_test_t10_right_start_peak_pwm = 0U;
 static volatile uint8 track_test_active = 0U;
 static volatile uint8 track_test_event = TRACK_TEST_RESULT_IDLE;
 static volatile uint8 motor_test_both_passed = 0U;
@@ -146,6 +180,10 @@ static float track_test_ramped_target = 0.0f;
 static float track_test_target_value = 0.0f;
 static float track_test_ramp_step = 0.0f;
 static float track_test_decel_step = 0.0f;
+static uint8 track_test_t10_start_active = 0U;
+static uint8 track_test_t10_left_confirm_ticks = 0U;
+static uint8 track_test_t10_right_confirm_ticks = 0U;
+static uint8 track_test_t10_steer_blend_ticks = 0U;
 #endif
 static uint8 track_test_pid_saved = 0U;
 static float track_test_saved_left_kp = 0.0f;
@@ -478,6 +516,7 @@ uint8 motion_runtime_clear_protection(void)
         return 0U;
     }
 
+    motion_runtime_stall_diag_stop();
     g_motion_protect_reason = MOTION_PROTECT_NONE;
     g_motion_run_unlocked = 0U;
     pwm_state = 0U;
@@ -653,6 +692,7 @@ static void motion_apply_left_output(float request)
 {
     int8 desired_sign = motion_sign_float(request);
     float desired_abs = motion_abs_float(request);
+    float slew_step = g_motor_pwm_slew_per_tick;
 
     desired_abs = motion_clamp_float(desired_abs, 0.0f, MOTOR_PWM_LIMIT);
 
@@ -696,10 +736,20 @@ static void motion_apply_left_output(float request)
         left_output_state.applied_sign = desired_sign;
     }
 
+#if TRACK_TEST_START_ASSIST_ENABLED
+    if (track_test_active
+        && g_track_test_mode == TRACK_TEST_MODE_T10
+        && track_test_t10_start_active)
+    {
+        slew_step = TRACK_TEST_T10_LEFT_BREAKAWAY_PWM
+            / (float)TRACK_TEST_T10_BREAKAWAY_RAMP_TICKS;
+    }
+#endif
+
     left_output_state.applied_abs_pwm = motion_approach(
         left_output_state.applied_abs_pwm,
         desired_abs,
-        g_motor_pwm_slew_per_tick);
+        slew_step);
 
     LEFT_MOTOR_DIR = left_output_state.applied_sign > 0
         ? LEFT_MOTOR_FORWARD_LEVEL
@@ -714,6 +764,7 @@ static void motion_apply_right_output(float request)
 {
     int8 desired_sign = motion_sign_float(request);
     float desired_abs = motion_abs_float(request);
+    float slew_step = g_motor_pwm_slew_per_tick;
 
     desired_abs = motion_clamp_float(desired_abs, 0.0f, MOTOR_PWM_LIMIT);
 
@@ -757,10 +808,20 @@ static void motion_apply_right_output(float request)
         right_output_state.applied_sign = desired_sign;
     }
 
+#if TRACK_TEST_START_ASSIST_ENABLED
+    if (track_test_active
+        && g_track_test_mode == TRACK_TEST_MODE_T10
+        && track_test_t10_start_active)
+    {
+        slew_step = motion_runtime_track_t10_right_start_pwm()
+            / (float)TRACK_TEST_T10_BREAKAWAY_RAMP_TICKS;
+    }
+#endif
+
     right_output_state.applied_abs_pwm = motion_approach(
         right_output_state.applied_abs_pwm,
         desired_abs,
-        g_motor_pwm_slew_per_tick);
+        slew_step);
 
     RIGHT_MOTOR_DIR = right_output_state.applied_sign > 0
         ? RIGHT_MOTOR_FORWARD_LEVEL
@@ -826,6 +887,7 @@ uint8 motion_runtime_motor_test_start(MotorTestSide side)
     if ((side != MOTOR_TEST_SIDE_LEFT
             && side != MOTOR_TEST_SIDE_RIGHT
             && side != MOTOR_TEST_SIDE_BOTH)
+        || stall_diag_active
         || g_motion_run_unlocked
         || g_imu_runtime_state != IMU_RUNTIME_READY
         || g_motion_protect_reason != MOTION_PROTECT_NONE)
@@ -1361,17 +1423,518 @@ uint8 motion_runtime_motor_test_both_passed(void)
     return motor_test_both_passed;
 }
 
+static uint16 motion_stall_diag_stage_pwm(uint8 stage)
+{
+    switch (stage)
+    {
+        case 1U: return STALL_DIAG_PWM_LOW_VALUE;
+        case 2U: return STALL_DIAG_PWM_MID_VALUE;
+        case 3U: return STALL_DIAG_PWM_HIGH_VALUE;
+        default: return 0U;
+    }
+}
+
+static void motion_stall_diag_apply_output(uint16 pwm)
+{
+    motion_runtime_force_stop();
+    if (stall_diag_active_side == MOTOR_TEST_SIDE_LEFT)
+    {
+        LEFT_MOTOR_DIR = LEFT_MOTOR_FORWARD_LEVEL;
+        pwm_set_duty(LEFT_MOTOR_PWM, (uint32)pwm);
+        left_output_state.applied_abs_pwm = (float)pwm;
+        left_output_state.applied_sign = 1;
+        g_motor_left_applied_pwm = (float)pwm;
+    }
+    else if (stall_diag_active_side == MOTOR_TEST_SIDE_RIGHT)
+    {
+        RIGHT_MOTOR_DIR = RIGHT_MOTOR_FORWARD_LEVEL;
+        pwm_set_duty(RIGHT_MOTOR_PWM, (uint32)pwm);
+        right_output_state.applied_abs_pwm = (float)pwm;
+        right_output_state.applied_sign = 1;
+        g_motor_right_applied_pwm = (float)pwm;
+    }
+}
+
+static void motion_stall_diag_reset_encoder_sample(void)
+{
+    ctimer_count_clean(MOTOR1_ENCODER);
+    ctimer_count_clean(MOTOR2_ENCODER);
+    g_encoder_left_raw = 0U;
+    g_encoder_right_raw = 0U;
+    g_encoder_left_signed = 0;
+    g_encoder_right_signed = 0;
+}
+
+static void motion_stall_diag_begin_precheck(MotorTestSide side)
+{
+    motion_runtime_force_stop();
+    motion_stall_diag_reset_encoder_sample();
+    stall_diag_active_side = (uint8)side;
+    stall_diag_stage = 0U;
+    stall_diag_stage_ticks_remaining = STALL_DIAG_PRECHECK_TICKS;
+    stall_diag_noise_ticks = 0U;
+    stall_diag_applied_pwm = 0U;
+    stall_diag_active_total = 0UL;
+    stall_diag_active_peak = 0U;
+}
+
+static void motion_stall_diag_begin_stage(uint8 stage)
+{
+    motion_stall_diag_reset_encoder_sample();
+    stall_diag_stage = stage;
+    stall_diag_stage_ticks_remaining = STALL_DIAG_STAGE_TICKS;
+    stall_diag_noise_ticks = 0U;
+    stall_diag_active_total = 0UL;
+    stall_diag_active_peak = 0U;
+    stall_diag_applied_pwm = motion_stall_diag_stage_pwm(stage);
+    motion_stall_diag_apply_output(stall_diag_applied_pwm);
+}
+
+static void motion_stall_diag_finish(
+    StallDiagResult result,
+    MotionProtectReason protect_reason,
+    uint8 post_event)
+{
+    stall_diag_active = 0U;
+    stall_diag_stage_ticks_remaining = 0U;
+    stall_diag_noise_ticks = 0U;
+    motion_runtime_force_stop();
+    g_stall_diag_result = (uint8)result;
+    if (post_event)
+    {
+        stall_diag_event = (uint8)result;
+    }
+    if (protect_reason != MOTION_PROTECT_NONE)
+    {
+        motion_runtime_trigger_protection(protect_reason);
+    }
+}
+
+static void motion_stall_diag_finish_side(void)
+{
+    uint8 moved = (uint8)(
+        stall_diag_active_total >= STALL_DIAG_MOVE_TOTAL_MIN
+        && stall_diag_active_peak >= STALL_DIAG_MOVE_PEAK_MIN);
+
+    if (moved)
+    {
+        if (stall_diag_active_side == MOTOR_TEST_SIDE_LEFT)
+        {
+            stall_diag_left_breakaway_pwm = stall_diag_applied_pwm;
+            stall_diag_pass_mask |= 0x01U;
+            if (stall_diag_requested_side == MOTOR_TEST_SIDE_BOTH)
+            {
+                motion_stall_diag_begin_precheck(MOTOR_TEST_SIDE_RIGHT);
+                return;
+            }
+        }
+        else
+        {
+            stall_diag_right_breakaway_pwm = stall_diag_applied_pwm;
+            stall_diag_pass_mask |= 0x02U;
+        }
+        motion_stall_diag_finish(
+            STALL_DIAG_RESULT_PASS,
+            MOTION_PROTECT_NONE,
+            1U);
+        return;
+    }
+
+    if (stall_diag_stage < 3U)
+    {
+        motion_stall_diag_begin_stage((uint8)(stall_diag_stage + 1U));
+        return;
+    }
+
+    if (stall_diag_active_side == MOTOR_TEST_SIDE_LEFT)
+    {
+        motion_stall_diag_finish(
+            STALL_DIAG_RESULT_LEFT_STALL,
+            MOTION_PROTECT_ENCODER_LEFT_STALL,
+            1U);
+    }
+    else
+    {
+        motion_stall_diag_finish(
+            STALL_DIAG_RESULT_RIGHT_STALL,
+            MOTION_PROTECT_ENCODER_RIGHT_STALL,
+            1U);
+    }
+}
+
+uint8 motion_runtime_stall_diag_start(MotorTestSide side)
+{
+    MotorTestSide first_side;
+
+    if ((side != MOTOR_TEST_SIDE_LEFT
+            && side != MOTOR_TEST_SIDE_RIGHT
+            && side != MOTOR_TEST_SIDE_BOTH)
+        || stall_diag_active
+        || motor_test_active
+        || encoder_test_active
+        || track_test_active
+        || g_motion_run_unlocked
+        || g_imu_runtime_state != IMU_RUNTIME_READY
+        || g_motion_protect_reason != MOTION_PROTECT_NONE
+        || motion_runtime_encoder_mode_mask() != MOTOR_TEST_ENCODER_MODE_MASK)
+    {
+        return 0U;
+    }
+
+    first_side = side == MOTOR_TEST_SIDE_BOTH
+        ? MOTOR_TEST_SIDE_LEFT : side;
+    stall_diag_requested_side = (uint8)side;
+    stall_diag_pass_mask = 0U;
+    stall_diag_left_total = 0UL;
+    stall_diag_right_total = 0UL;
+    stall_diag_left_peak = 0U;
+    stall_diag_right_peak = 0U;
+    stall_diag_left_breakaway_pwm = 0U;
+    stall_diag_right_breakaway_pwm = 0U;
+    stall_diag_event = STALL_DIAG_RESULT_IDLE;
+    g_stall_diag_result = STALL_DIAG_RESULT_RUNNING;
+    stall_diag_active = 1U;
+    motion_stall_diag_begin_precheck(first_side);
+    return 1U;
+}
+
+uint8 motion_runtime_stall_diag_stop(void)
+{
+    uint8 was_active;
+
+    interrupt_global_disable();
+    was_active = stall_diag_active;
+    if (was_active)
+    {
+        motion_stall_diag_finish(
+            STALL_DIAG_RESULT_STOPPED,
+            MOTION_PROTECT_NONE,
+            0U);
+    }
+    else
+    {
+        motion_runtime_force_stop();
+    }
+    interrupt_global_enable();
+    return was_active;
+}
+
+void motion_runtime_stall_diag_tick(void)
+{
+    uint16 active_raw;
+    uint16 inactive_raw;
+
+    if (!stall_diag_active)
+    {
+        return;
+    }
+    if (g_imu_runtime_state != IMU_RUNTIME_READY)
+    {
+        motion_stall_diag_finish(
+            STALL_DIAG_RESULT_IMU,
+            MOTION_PROTECT_IMU,
+            1U);
+        return;
+    }
+    if (g_motion_protect_reason != MOTION_PROTECT_NONE)
+    {
+        motion_stall_diag_finish(
+            STALL_DIAG_RESULT_PROTECT,
+            MOTION_PROTECT_NONE,
+            1U);
+        return;
+    }
+    if (g_motion_run_unlocked)
+    {
+        motion_stall_diag_finish(
+            STALL_DIAG_RESULT_PROTECT,
+            MOTION_PROTECT_RUN_LOCKED,
+            1U);
+        return;
+    }
+    if (motion_runtime_encoder_mode_mask() != MOTOR_TEST_ENCODER_MODE_MASK)
+    {
+        motion_stall_diag_finish(
+            STALL_DIAG_RESULT_ENCODER_MODE,
+            MOTION_PROTECT_ENCODER_MODE,
+            1U);
+        return;
+    }
+
+    if (stall_diag_stage == 0U)
+    {
+        if (g_encoder_left_raw > STALL_DIAG_IDLE_RAW_MAX
+            || g_encoder_right_raw > STALL_DIAG_IDLE_RAW_MAX)
+        {
+            if (stall_diag_noise_ticks < 255U)
+            {
+                stall_diag_noise_ticks++;
+            }
+        }
+        else
+        {
+            stall_diag_noise_ticks = 0U;
+        }
+        if (stall_diag_noise_ticks >= STALL_DIAG_NOISE_FAULT_TICKS)
+        {
+            motion_stall_diag_finish(
+                STALL_DIAG_RESULT_ENCODER_NOISE,
+                MOTION_PROTECT_ENCODER_NOISE,
+                1U);
+            return;
+        }
+        if (stall_diag_stage_ticks_remaining > 0U)
+        {
+            stall_diag_stage_ticks_remaining--;
+        }
+        if (stall_diag_stage_ticks_remaining == 0U)
+        {
+            motion_stall_diag_begin_stage(1U);
+        }
+        return;
+    }
+
+    active_raw = stall_diag_active_side == MOTOR_TEST_SIDE_LEFT
+        ? g_encoder_left_raw : g_encoder_right_raw;
+    inactive_raw = stall_diag_active_side == MOTOR_TEST_SIDE_LEFT
+        ? g_encoder_right_raw : g_encoder_left_raw;
+
+    if (stall_diag_active_total <= (0xFFFFFFFFUL - (uint32)active_raw))
+    {
+        stall_diag_active_total += (uint32)active_raw;
+    }
+    else
+    {
+        stall_diag_active_total = 0xFFFFFFFFUL;
+    }
+    if (active_raw > stall_diag_active_peak)
+    {
+        stall_diag_active_peak = active_raw;
+    }
+    if (stall_diag_active_side == MOTOR_TEST_SIDE_LEFT)
+    {
+        if (stall_diag_left_total <= (0xFFFFFFFFUL - (uint32)active_raw))
+        {
+            stall_diag_left_total += (uint32)active_raw;
+        }
+        else
+        {
+            stall_diag_left_total = 0xFFFFFFFFUL;
+        }
+        if (active_raw > stall_diag_left_peak)
+        {
+            stall_diag_left_peak = active_raw;
+        }
+    }
+    else
+    {
+        if (stall_diag_right_total <= (0xFFFFFFFFUL - (uint32)active_raw))
+        {
+            stall_diag_right_total += (uint32)active_raw;
+        }
+        else
+        {
+            stall_diag_right_total = 0xFFFFFFFFUL;
+        }
+        if (active_raw > stall_diag_right_peak)
+        {
+            stall_diag_right_peak = active_raw;
+        }
+    }
+
+    if (active_raw > MOTOR_TEST_RUNNING_RAW_MAX
+        || inactive_raw > MOTOR_TEST_UNTESTED_RAW_MAX)
+    {
+        if (stall_diag_noise_ticks < 255U)
+        {
+            stall_diag_noise_ticks++;
+        }
+    }
+    else
+    {
+        stall_diag_noise_ticks = 0U;
+    }
+    if (stall_diag_noise_ticks >= STALL_DIAG_NOISE_FAULT_TICKS)
+    {
+        motion_stall_diag_finish(
+            STALL_DIAG_RESULT_ENCODER_NOISE,
+            MOTION_PROTECT_ENCODER_NOISE,
+            1U);
+        return;
+    }
+
+    if (stall_diag_stage_ticks_remaining > 0U)
+    {
+        stall_diag_stage_ticks_remaining--;
+    }
+    if (stall_diag_stage_ticks_remaining == 0U)
+    {
+        motion_stall_diag_finish_side();
+    }
+}
+
+uint8 motion_runtime_stall_diag_is_active(void)
+{
+    return stall_diag_active;
+}
+
+StallDiagResult motion_runtime_stall_diag_take_event(void)
+{
+    StallDiagResult event;
+
+    interrupt_global_disable();
+    event = (StallDiagResult)stall_diag_event;
+    stall_diag_event = STALL_DIAG_RESULT_IDLE;
+    interrupt_global_enable();
+    return event;
+}
+
+StallDiagResult motion_runtime_stall_diag_result(void)
+{
+    return (StallDiagResult)g_stall_diag_result;
+}
+
+const char *motion_runtime_stall_diag_result_text(void)
+{
+    switch (g_stall_diag_result)
+    {
+        case STALL_DIAG_RESULT_RUNNING: return "RUNNING";
+        case STALL_DIAG_RESULT_PASS: return "PASS";
+        case STALL_DIAG_RESULT_STOPPED: return "STOPPED";
+        case STALL_DIAG_RESULT_LEFT_STALL: return "L_STALL";
+        case STALL_DIAG_RESULT_RIGHT_STALL: return "R_STALL";
+        case STALL_DIAG_RESULT_IMU: return "IMU";
+        case STALL_DIAG_RESULT_PROTECT: return "PROTECT";
+        case STALL_DIAG_RESULT_ENCODER_MODE: return "ENC_MODE";
+        case STALL_DIAG_RESULT_ENCODER_NOISE: return "ENC_NOISE";
+        default: return "IDLE";
+    }
+}
+
+const char *motion_runtime_stall_diag_requested_side_text(void)
+{
+    switch (stall_diag_requested_side)
+    {
+        case MOTOR_TEST_SIDE_LEFT: return "L";
+        case MOTOR_TEST_SIDE_RIGHT: return "R";
+        case MOTOR_TEST_SIDE_BOTH: return "B";
+        default: return "NONE";
+    }
+}
+
+const char *motion_runtime_stall_diag_active_side_text(void)
+{
+    switch (stall_diag_active_side)
+    {
+        case MOTOR_TEST_SIDE_LEFT: return "L";
+        case MOTOR_TEST_SIDE_RIGHT: return "R";
+        default: return "NONE";
+    }
+}
+
+uint8 motion_runtime_stall_diag_stage(void)
+{
+    return stall_diag_stage;
+}
+
+uint16 motion_runtime_stall_diag_applied_pwm(void)
+{
+    return stall_diag_applied_pwm;
+}
+
+uint32 motion_runtime_stall_diag_left_total(void)
+{
+    uint32 value;
+
+    interrupt_global_disable();
+    value = stall_diag_left_total;
+    interrupt_global_enable();
+    return value;
+}
+
+uint32 motion_runtime_stall_diag_right_total(void)
+{
+    uint32 value;
+
+    interrupt_global_disable();
+    value = stall_diag_right_total;
+    interrupt_global_enable();
+    return value;
+}
+
+uint16 motion_runtime_stall_diag_left_peak(void)
+{
+    uint16 value;
+
+    interrupt_global_disable();
+    value = stall_diag_left_peak;
+    interrupt_global_enable();
+    return value;
+}
+
+uint16 motion_runtime_stall_diag_right_peak(void)
+{
+    uint16 value;
+
+    interrupt_global_disable();
+    value = stall_diag_right_peak;
+    interrupt_global_enable();
+    return value;
+}
+
+uint16 motion_runtime_stall_diag_left_breakaway_pwm(void)
+{
+    uint16 value;
+
+    interrupt_global_disable();
+    value = stall_diag_left_breakaway_pwm;
+    interrupt_global_enable();
+    return value;
+}
+
+uint16 motion_runtime_stall_diag_right_breakaway_pwm(void)
+{
+    uint16 value;
+
+    interrupt_global_disable();
+    value = stall_diag_right_breakaway_pwm;
+    interrupt_global_enable();
+    return value;
+}
+
+uint8 motion_runtime_stall_diag_pass_mask(void)
+{
+    return stall_diag_pass_mask;
+}
+
 uint8 motion_runtime_track_test_start(void)
 {
+    g_track_test_t12_force_direction = 0;
     return motion_runtime_track_test_start_mode(TRACK_TEST_MODE_T10);
+}
+
+void motion_runtime_set_track_test_t12_force_direction(int8 direction)
+{
+    if (direction > 0)
+    {
+        g_track_test_t12_force_direction = 1;
+    }
+    else if (direction < 0)
+    {
+        g_track_test_t12_force_direction = -1;
+    }
+    else
+    {
+        g_track_test_t12_force_direction = 0;
+    }
 }
 
 uint8 motion_runtime_track_test_start_mode(uint8 mode)
 {
     uint16 target_value;
 
-    if (!motor_test_both_passed
-        || track_test_active
+    if (track_test_active
+        || stall_diag_active
         || motor_test_active
         || encoder_test_active
         || g_motion_run_unlocked
@@ -1400,6 +1963,12 @@ uint8 motion_runtime_track_test_start_mode(uint8 mode)
     g_encoder_right_raw = 0U;
     g_encoder_left_signed = 0;
     g_encoder_right_signed = 0;
+    l_encoder = 0.0f;
+    r_encoder = 0.0f;
+    l_encoder_last = 0.0f;
+    r_encoder_last = 0.0f;
+    l_speed_now = 0.0f;
+    r_speed_now = 0.0f;
 
     track_test_saved_left_kp = L_pid.kp;
     track_test_saved_left_ki = L_pid.ki;
@@ -1424,13 +1993,13 @@ uint8 motion_runtime_track_test_start_mode(uint8 mode)
         ? TRACK_TEST_T12_TARGET_VALUE
         : TRACK_TEST_T10_TARGET_VALUE;
 #if TRACK_TEST_START_ASSIST_ENABLED
-    change_speed_Target_base(0);
-    track_test_ramped_target = 0.0f;
     track_test_target_value = (float)target_value;
     track_test_ramp_step = track_test_target_value
         / (float)TRACK_TEST_TARGET_RAMP_TICKS;
     track_test_decel_step = track_test_target_value
         / (float)TRACK_TEST_DECEL_RAMP_TICKS;
+    change_speed_Target_base(0);
+    track_test_ramped_target = 0.0f;
 #else
     change_speed_Target_base((int)target_value);
 #endif
@@ -1457,6 +2026,23 @@ uint8 motion_runtime_track_test_start_mode(uint8 mode)
     g_track_test_start_sample_count = 0U;
     g_track_test_start_left_total = 0U;
     g_track_test_start_right_total = 0U;
+    g_track_test_t10_start_release_mask = 0U;
+    g_track_test_t10_start_release_sample_count = 0U;
+    g_track_test_t10_start_release_left_total = 0U;
+    g_track_test_t10_start_release_right_total = 0U;
+    g_track_test_t10_start_stage = mode == TRACK_TEST_MODE_T10 ? 1U : 0U;
+    g_track_test_t10_start_peak_pwm = mode == TRACK_TEST_MODE_T10
+        ? (uint16)TRACK_TEST_T10_LEFT_BREAKAWAY_PWM : 0U;
+    g_track_test_t10_right_start_stage = mode == TRACK_TEST_MODE_T10 ? 1U : 0U;
+    g_track_test_t10_right_start_peak_pwm = mode == TRACK_TEST_MODE_T10
+        ? (uint16)TRACK_TEST_T10_RIGHT_BREAKAWAY_PWM : 0U;
+#if TRACK_TEST_START_ASSIST_ENABLED
+    track_test_t10_start_active = mode == TRACK_TEST_MODE_T10 ? 1U : 0U;
+    track_test_t10_left_confirm_ticks = 0U;
+    track_test_t10_right_confirm_ticks = 0U;
+    track_test_t10_steer_blend_ticks = mode == TRACK_TEST_MODE_T10
+        ? 0U : TRACK_TEST_T10_STEER_BLEND_TICKS;
+#endif
     track_test_event = TRACK_TEST_RESULT_IDLE;
     g_track_test_mode = mode;
 
@@ -1609,6 +2195,209 @@ uint8 motion_runtime_track_test_is_active(void)
     return track_test_active;
 }
 
+void motion_runtime_track_t10_startup_tick(void)
+{
+#if TRACK_TEST_START_ASSIST_ENABLED
+    uint32 left_total;
+    uint32 right_total;
+    uint16 sample_count;
+
+    if (!track_test_active || g_track_test_mode != TRACK_TEST_MODE_T10)
+    {
+        return;
+    }
+
+    if (!track_test_t10_start_active)
+    {
+        if (track_test_t10_steer_blend_ticks < TRACK_TEST_T10_STEER_BLEND_TICKS)
+        {
+            track_test_t10_steer_blend_ticks++;
+        }
+        return;
+    }
+
+    left_total = g_track_test_start_left_total + (uint32)g_encoder_left_raw;
+    right_total = g_track_test_start_right_total + (uint32)g_encoder_right_raw;
+    sample_count = g_track_test_start_sample_count < 65535U
+        ? (uint16)(g_track_test_start_sample_count + 1U)
+        : g_track_test_start_sample_count;
+
+    if ((g_track_test_t10_start_release_mask & 0x01U) == 0U)
+    {
+        if (g_encoder_left_raw >= TRACK_TEST_T10_START_RAW_MIN)
+        {
+            if (track_test_t10_left_confirm_ticks < 255U)
+            {
+                track_test_t10_left_confirm_ticks++;
+            }
+        }
+        else
+        {
+            track_test_t10_left_confirm_ticks = 0U;
+        }
+        if (track_test_t10_left_confirm_ticks >= TRACK_TEST_T10_START_CONFIRM_TICKS
+            && left_total >= TRACK_TEST_T10_START_MOVE_TOTAL)
+        {
+            g_track_test_t10_start_release_mask |= 0x01U;
+        }
+    }
+
+    if ((g_track_test_t10_start_release_mask & 0x02U) == 0U)
+    {
+        if (g_encoder_right_raw >= TRACK_TEST_T10_START_RAW_MIN)
+        {
+            if (track_test_t10_right_confirm_ticks < 255U)
+            {
+                track_test_t10_right_confirm_ticks++;
+            }
+        }
+        else
+        {
+            track_test_t10_right_confirm_ticks = 0U;
+        }
+        if (track_test_t10_right_confirm_ticks >= TRACK_TEST_T10_START_CONFIRM_TICKS
+            && right_total >= TRACK_TEST_T10_START_MOVE_TOTAL)
+        {
+            g_track_test_t10_start_release_mask |= 0x02U;
+        }
+    }
+
+    if ((g_track_test_t10_start_release_mask & 0x02U) == 0U)
+    {
+        if (sample_count >= TRACK_TEST_T10_FINAL_SAMPLE)
+        {
+            g_track_test_t10_right_start_stage = 3U;
+            g_track_test_t10_right_start_peak_pwm =
+                (uint16)TRACK_TEST_T10_RIGHT_FINAL_PWM;
+        }
+        else if (sample_count >= TRACK_TEST_T10_RETRY_SAMPLE)
+        {
+            g_track_test_t10_right_start_stage = 2U;
+            g_track_test_t10_right_start_peak_pwm =
+                (uint16)TRACK_TEST_T10_RIGHT_RETRY_PWM;
+        }
+    }
+
+    if ((g_track_test_t10_start_release_mask & 0x01U) == 0U)
+    {
+        if (sample_count >= TRACK_TEST_T10_FINAL_SAMPLE)
+        {
+            g_track_test_t10_start_stage = 3U;
+            g_track_test_t10_start_peak_pwm =
+                (uint16)TRACK_TEST_T10_LEFT_FINAL_PWM;
+        }
+        else if (sample_count >= TRACK_TEST_T10_RETRY_SAMPLE)
+        {
+            g_track_test_t10_start_stage = 2U;
+            g_track_test_t10_start_peak_pwm =
+                (uint16)TRACK_TEST_T10_LEFT_RETRY_PWM;
+        }
+    }
+
+    if (g_track_test_t10_start_release_mask == 0x03U
+        && track_test_ramped_target >= TRACK_TEST_T10_RELEASE_TARGET)
+    {
+        track_test_t10_start_active = 0U;
+        track_test_t10_steer_blend_ticks = 0U;
+        g_track_test_t10_start_release_sample_count = sample_count;
+        g_track_test_t10_start_release_left_total = left_total;
+        g_track_test_t10_start_release_right_total = right_total;
+        return;
+    }
+
+    if (sample_count >= TRACK_TEST_START_SYNC_SAMPLES)
+    {
+        if ((g_track_test_t10_start_release_mask & 0x01U) == 0U)
+        {
+            motion_runtime_trigger_protection(MOTION_PROTECT_ENCODER_LEFT_STALL);
+        }
+        else if ((g_track_test_t10_start_release_mask & 0x02U) == 0U)
+        {
+            motion_runtime_trigger_protection(MOTION_PROTECT_ENCODER_RIGHT_STALL);
+        }
+    }
+#endif
+}
+
+uint8 motion_runtime_track_t10_startup_is_active(void)
+{
+#if TRACK_TEST_START_ASSIST_ENABLED
+    return track_test_active
+        && g_track_test_mode == TRACK_TEST_MODE_T10
+        && track_test_t10_start_active;
+#else
+    return 0U;
+#endif
+}
+
+float motion_runtime_track_t10_left_start_pwm(void)
+{
+#if TRACK_TEST_START_ASSIST_ENABLED
+    if (!motion_runtime_track_t10_startup_is_active())
+    {
+        return 0.0f;
+    }
+    if ((g_track_test_t10_start_release_mask & 0x01U) != 0U)
+    {
+        return TRACK_TEST_T10_LEFT_BREAKAWAY_PWM;
+    }
+    if (g_track_test_t10_start_stage >= 3U)
+    {
+        return TRACK_TEST_T10_LEFT_FINAL_PWM;
+    }
+    if (g_track_test_t10_start_stage >= 2U)
+    {
+        return TRACK_TEST_T10_LEFT_RETRY_PWM;
+    }
+    return TRACK_TEST_T10_LEFT_BREAKAWAY_PWM;
+#else
+    return 0.0f;
+#endif
+}
+
+float motion_runtime_track_t10_right_start_pwm(void)
+{
+#if TRACK_TEST_START_ASSIST_ENABLED
+    if (!motion_runtime_track_t10_startup_is_active())
+    {
+        return 0.0f;
+    }
+    if ((g_track_test_t10_start_release_mask & 0x02U) != 0U)
+    {
+        return TRACK_TEST_T10_RIGHT_BREAKAWAY_PWM;
+    }
+    if (g_track_test_t10_right_start_stage >= 3U)
+    {
+        return TRACK_TEST_T10_RIGHT_FINAL_PWM;
+    }
+    if (g_track_test_t10_right_start_stage >= 2U)
+    {
+        return TRACK_TEST_T10_RIGHT_RETRY_PWM;
+    }
+    return TRACK_TEST_T10_RIGHT_BREAKAWAY_PWM;
+#else
+    return 0.0f;
+#endif
+}
+
+float motion_runtime_track_t10_steering_scale(void)
+{
+#if TRACK_TEST_START_ASSIST_ENABLED
+    if (motion_runtime_track_t10_startup_is_active())
+    {
+        return 0.0f;
+    }
+    if (track_test_t10_steer_blend_ticks >= TRACK_TEST_T10_STEER_BLEND_TICKS)
+    {
+        return 1.0f;
+    }
+    return (float)track_test_t10_steer_blend_ticks
+        / (float)TRACK_TEST_T10_STEER_BLEND_TICKS;
+#else
+    return 1.0f;
+#endif
+}
+
 uint16 motion_runtime_track_test_remaining_ms(void)
 {
     return (uint16)(
@@ -1712,7 +2501,8 @@ uint8 motion_runtime_encoder_test_start(MotorTestSide side)
     if ((side != MOTOR_TEST_SIDE_LEFT && side != MOTOR_TEST_SIDE_RIGHT)
         || g_motion_run_unlocked
         || motor_test_active
-        || track_test_active)
+        || track_test_active
+        || stall_diag_active)
     {
         return 0U;
     }
