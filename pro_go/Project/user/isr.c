@@ -143,12 +143,16 @@ static uint8 scope_test_phase = 0U;
 #define TRACK_T12_RATE_ENTRY_DPS             70.0f
 #define TRACK_T12_RATE_TARGET_DPS           130.0f
 #define TRACK_T12_RATE_TAIL_DPS              35.0f
-#define TRACK_T12_RATE_KP                     0.00115f
+#define TRACK_T12_RATE_KP_MAIN                0.00060f
+#define TRACK_T12_RATE_KP_EXIT                0.00115f
 #define TRACK_T12_RATE_KI                     0.00020f
 #define TRACK_T12_RATE_I_LIMIT               40.0f
 #define TRACK_T12_RATE_CORRECTION_RISE_LIMIT  0.05f
-#define TRACK_T12_RATE_CORRECTION_FALL_LIMIT  0.06f
+#define TRACK_T12_RATE_CORRECTION_FALL_LIMIT  0.04f
 #define TRACK_T12_RATE_CORRECTION_EXIT_FALL_LIMIT 0.14f
+#define TRACK_T12_GAIN_BLEND_START_DEG       130.0f
+#define TRACK_T12_GAIN_BLEND_END_DEG         145.0f
+#define TRACK_T12_MID_SAMPLE_DEG              90.0f
 #define TRACK_T12_ARC_RATIO_MIN              -0.04f
 #define TRACK_T12_ARC_RATIO_MAX               0.36f
 #define TRACK_T12_EXIT_SPEED_SCALE             0.75f
@@ -226,6 +230,11 @@ volatile uint16 xdata g_track_t12_actual_rate_x10 = 0U;
 volatile uint16 xdata g_track_t12_rate_error_peak_x10 = 0U;
 volatile uint16 xdata g_track_t12_exit_ratio_x1000 = 0U;
 volatile uint16 xdata g_track_t12_exit_speed_scale_x1000 = 0U;
+volatile uint8 xdata g_track_t12_mid_valid = 0U;
+volatile uint16 xdata g_track_t12_mid_angle_x10 = 0U;
+volatile uint16 xdata g_track_t12_mid_target_rate_x10 = 0U;
+volatile uint16 xdata g_track_t12_mid_actual_rate_x10 = 0U;
+volatile uint16 xdata g_track_t12_mid_ratio_x1000 = 0U;
 volatile uint8 xdata g_track_t12_post_valid = 0U;
 volatile uint8 xdata g_track_t12_post_delay_ticks = 0U;
 volatile uint16 xdata g_track_t12_post_angle_x10 = 0U;
@@ -430,6 +439,11 @@ void reset_track_test_exit_diagnostic(void)
 	g_track_t12_rate_error_peak_x10 = 0U;
 	g_track_t12_exit_ratio_x1000 = 0U;
 	g_track_t12_exit_speed_scale_x1000 = 0U;
+	g_track_t12_mid_valid = 0U;
+	g_track_t12_mid_angle_x10 = 0U;
+	g_track_t12_mid_target_rate_x10 = 0U;
+	g_track_t12_mid_actual_rate_x10 = 0U;
+	g_track_t12_mid_ratio_x1000 = 0U;
 	g_track_t12_post_valid = 0U;
 	g_track_t12_post_delay_ticks = 0U;
 	g_track_t12_post_angle_x10 = 0U;
@@ -630,6 +644,8 @@ static void track_t12_update_arc_control(void)
 	float rate_error_abs;
 	float correction;
 	float correction_fall_limit;
+	float rate_kp;
+	float gain_profile;
 	float profile;
 	float line_feedback;
 
@@ -670,11 +686,18 @@ static void track_t12_update_arc_control(void)
 		track_t12_rate_integral,
 		-TRACK_T12_RATE_I_LIMIT,
 		TRACK_T12_RATE_I_LIMIT);
-	correction = TRACK_T12_RATE_KP * rate_error
+	gain_profile = track_t12_smoothstep(
+		(track_t12_angle - TRACK_T12_GAIN_BLEND_START_DEG)
+			/ (TRACK_T12_GAIN_BLEND_END_DEG
+				- TRACK_T12_GAIN_BLEND_START_DEG));
+	rate_kp = TRACK_T12_RATE_KP_MAIN
+		+ (TRACK_T12_RATE_KP_EXIT - TRACK_T12_RATE_KP_MAIN)
+			* gain_profile;
+	correction_fall_limit = TRACK_T12_RATE_CORRECTION_FALL_LIMIT
+		+ (TRACK_T12_RATE_CORRECTION_EXIT_FALL_LIMIT
+			- TRACK_T12_RATE_CORRECTION_FALL_LIMIT) * gain_profile;
+	correction = rate_kp * rate_error
 		+ TRACK_T12_RATE_KI * track_t12_rate_integral;
-	correction_fall_limit = track_t12_state == TRACK_T12_EXIT_TAPER
-		? TRACK_T12_RATE_CORRECTION_EXIT_FALL_LIMIT
-		: TRACK_T12_RATE_CORRECTION_FALL_LIMIT;
 	correction = limit_function(
 		correction,
 		-correction_fall_limit,
@@ -697,6 +720,16 @@ static void track_t12_update_arc_control(void)
 	if ((uint16)(rate_error_abs * 10.0f) > g_track_t12_rate_error_peak_x10)
 	{
 		g_track_t12_rate_error_peak_x10 = (uint16)(rate_error_abs * 10.0f);
+	}
+	if (!g_track_t12_mid_valid
+		&& track_t12_angle >= TRACK_T12_MID_SAMPLE_DEG)
+	{
+		g_track_t12_mid_angle_x10 = (uint16)(track_t12_angle * 10.0f);
+		g_track_t12_mid_target_rate_x10 = g_track_t12_target_rate_x10;
+		g_track_t12_mid_actual_rate_x10 = g_track_t12_actual_rate_x10;
+		g_track_t12_mid_ratio_x1000 = (uint16)(
+			fabs(track_t12_turn_filtered) * 1000.0f);
+		g_track_t12_mid_valid = 1U;
 	}
 }
 
