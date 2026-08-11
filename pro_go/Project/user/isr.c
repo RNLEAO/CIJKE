@@ -119,28 +119,41 @@ static uint8 scope_test_phase = 0U;
 #endif
 
 /* T12 is an explicit half-circle test mode; T10 never enters this state machine. */
-#define TRACK_T12_APPROACH                 0U
-#define TRACK_T12_ENTRY_CONFIRM            1U
-#define TRACK_T12_HALF                     2U
-#define TRACK_T12_HANDOFF                  3U
-#define TRACK_T12_ARM_CONFIRM_TICKS        3U
-#define TRACK_T12_ENTRY_CONFIRM_TICKS      3U
-#define TRACK_T12_EXIT_CONFIRM_TICKS       2U
-#define TRACK_T12_ENTRY_TIMEOUT_TICKS    100U
-#define TRACK_T12_HALF_MIN_TICKS           40U
-#define TRACK_T12_HALF_ANGLE_MIN         160.0f
-#define TRACK_T12_HALF_ANGLE_EXIT         195.0f
-#define TRACK_T12_HALF_MAX_TICKS          230U
-#define TRACK_T12_HALF_RAMP_TICKS          24U
-#define TRACK_T12_HANDOFF_TICKS            15U
-#define TRACK_T12_HALF_ENTRY_RATIO          0.22f
-#define TRACK_T12_HALF_RATIO                0.285f
-#define TRACK_T12_HALF_TAPER_START_DEG     110.0f
-#define TRACK_T12_HALF_TAPER_END_DEG       170.0f
-#define TRACK_T12_HALF_TAIL_RATIO            0.16f
-#define TRACK_T12_EXIT_RATIO                0.08f
-#define TRACK_T12_LINE_FEEDBACK             0.30f
-#define TRACK_T12_TURN_FILTER_ALPHA          0.25f
+#define TRACK_T12_APPROACH                  0U
+#define TRACK_T12_ENTRY_CONFIRM             1U
+#define TRACK_T12_ENTRY_RAMP                2U
+#define TRACK_T12_CONSTANT_CURVATURE        3U
+#define TRACK_T12_EXIT_TAPER                4U
+#define TRACK_T12_REACQUIRE                 5U
+#define TRACK_T12_NORMAL                    6U
+#define TRACK_T12_ARM_CONFIRM_TICKS         3U
+#define TRACK_T12_ENTRY_CONFIRM_TICKS       3U
+#define TRACK_T12_REACQUIRE_CONFIRM_TICKS   3U
+#define TRACK_T12_ENTRY_TIMEOUT_TICKS     100U
+#define TRACK_T12_HALF_MAX_TICKS          210U
+#define TRACK_T12_ENTRY_RAMP_TICKS         20U
+#define TRACK_T12_REACQUIRE_BLEND_TICKS    12U
+#define TRACK_T12_HALF_ENTRY_RATIO           0.22f
+#define TRACK_T12_HALF_RATIO                 0.285f
+#define TRACK_T12_HALF_TAIL_RATIO             0.10f
+#define TRACK_T12_TAPER_START_DEG           145.0f
+#define TRACK_T12_TAPER_END_DEG             175.0f
+#define TRACK_T12_REACQUIRE_MIN_DEG         165.0f
+#define TRACK_T12_HARD_EXIT_DEG             185.0f
+#define TRACK_T12_RATE_ENTRY_DPS             70.0f
+#define TRACK_T12_RATE_TARGET_DPS           130.0f
+#define TRACK_T12_RATE_TAIL_DPS              55.0f
+#define TRACK_T12_RATE_KP                     0.00055f
+#define TRACK_T12_RATE_KI                     0.00030f
+#define TRACK_T12_RATE_I_LIMIT               40.0f
+#define TRACK_T12_RATE_CORRECTION_LIMIT       0.045f
+#define TRACK_T12_ARC_RATIO_MIN               0.05f
+#define TRACK_T12_ARC_RATIO_MAX               0.36f
+#define TRACK_T12_LINE_FEEDBACK               0.15f
+#define TRACK_T12_TURN_FILTER_ALPHA           0.25f
+#define TRACK_T12_REACQUIRE_FILTER_ALPHA      0.45f
+#define TRACK_T12_REACQUIRE_SUM_TOLERANCE     8U
+#define TRACK_T12_REACQUIRE_ERROR_TOLERANCE   0.08f
 #define TRACK_T12_START_SYNC_GAIN            0.45f
 #define TRACK_T12_START_SYNC_LIMIT           0.25f
 #define TRACK_T12_START_BALANCE_X1000      700U
@@ -161,9 +174,17 @@ static uint8 track_t12_entry_ticks = 0U;
 static uint8 track_t12_exit_ticks = 0U;
 static uint8 track_t12_exit_trigger_pending = 0U;
 static uint16 track_t12_state_ticks = 0U;
+static uint16 track_t12_half_ticks = 0U;
 static uint16 track_t12_entry_timeout = 0U;
+static uint16 track_t12_previous_line_sum = 0U;
 static float track_t12_angle = 0.0f;
 static float track_t12_turn_filtered = 0.0f;
+static float track_t12_previous_error_abs = 0.0f;
+static float track_t12_rate_integral = 0.0f;
+static float track_t12_target_rate_dps = 0.0f;
+static float track_t12_actual_rate_dps = 0.0f;
+static float track_t12_arc_ratio = 0.0f;
+static float track_t12_reacquire_start_ratio = 0.0f;
 
 volatile uint8 xdata g_track_t12_start_release_reason = 0U;
 volatile uint16 xdata g_track_t12_start_release_sample_count = 0U;
@@ -188,6 +209,12 @@ volatile uint8 xdata g_track_t12_exit_norm_rm = 0U;
 volatile uint8 xdata g_track_t12_exit_norm_r = 0U;
 volatile int16 xdata g_track_t12_exit_error_x1000 = 0;
 volatile uint16 xdata g_track_t12_exit_sum = 0U;
+volatile uint8 xdata g_track_t12_exit_state = TRACK_T12_APPROACH;
+volatile uint8 xdata g_track_t12_reacquire_confirm_count = 0U;
+volatile uint16 xdata g_track_t12_target_rate_x10 = 0U;
+volatile uint16 xdata g_track_t12_actual_rate_x10 = 0U;
+volatile uint16 xdata g_track_t12_rate_error_peak_x10 = 0U;
+volatile uint16 xdata g_track_t12_exit_ratio_x1000 = 0U;
 volatile uint8 xdata g_track_t12_post_valid = 0U;
 volatile uint8 xdata g_track_t12_post_delay_ticks = 0U;
 volatile uint16 xdata g_track_t12_post_angle_x10 = 0U;
@@ -334,9 +361,17 @@ void reset_track_test_steering_state(void)
 	track_t12_exit_ticks = 0U;
 	track_t12_exit_trigger_pending = 0U;
 	track_t12_state_ticks = 0U;
+	track_t12_half_ticks = 0U;
 	track_t12_entry_timeout = 0U;
+	track_t12_previous_line_sum = 0U;
 	track_t12_angle = 0.0f;
 	track_t12_turn_filtered = 0.0f;
+	track_t12_previous_error_abs = 0.0f;
+	track_t12_rate_integral = 0.0f;
+	track_t12_target_rate_dps = 0.0f;
+	track_t12_actual_rate_dps = 0.0f;
+	track_t12_arc_ratio = 0.0f;
+	track_t12_reacquire_start_ratio = 0.0f;
 }
 
 void reset_track_test_exit_diagnostic(void)
@@ -364,6 +399,12 @@ void reset_track_test_exit_diagnostic(void)
 	g_track_t12_exit_norm_r = 0U;
 	g_track_t12_exit_error_x1000 = 0;
 	g_track_t12_exit_sum = 0U;
+	g_track_t12_exit_state = TRACK_T12_APPROACH;
+	g_track_t12_reacquire_confirm_count = 0U;
+	g_track_t12_target_rate_x10 = 0U;
+	g_track_t12_actual_rate_x10 = 0U;
+	g_track_t12_rate_error_peak_x10 = 0U;
+	g_track_t12_exit_ratio_x1000 = 0U;
 	g_track_t12_post_valid = 0U;
 	g_track_t12_post_delay_ticks = 0U;
 	g_track_t12_post_angle_x10 = 0U;
@@ -374,6 +415,8 @@ void reset_track_test_exit_diagnostic(void)
 	g_track_t12_post_error_x1000 = 0;
 	g_track_t12_post_sum = 0U;
 }
+
+static float track_line_turn_ratio_raw(float track_error);
 
 static void track_t12_update_approach_diagnostic(void)
 {
@@ -410,13 +453,20 @@ static void track_t12_update_approach_diagnostic(void)
 
 static void track_t12_start_half(int8 direction, uint8 source)
 {
-	track_t12_state = TRACK_T12_HALF;
+	track_t12_state = TRACK_T12_ENTRY_RAMP;
 	track_t12_state_ticks = 0U;
+	track_t12_half_ticks = 0U;
 	track_t12_exit_ticks = 0U;
 	track_t12_exit_trigger_pending = 0U;
 	track_t12_angle = 0.0f;
-	track_t12_turn_filtered = (float)direction
-		* TRACK_T12_HALF_ENTRY_RATIO;
+	track_t12_turn_filtered = 0.0f;
+	track_t12_previous_line_sum = inductance4_get_line_sum();
+	track_t12_previous_error_abs = fabs(error);
+	track_t12_rate_integral = 0.0f;
+	track_t12_target_rate_dps = TRACK_T12_RATE_ENTRY_DPS;
+	track_t12_actual_rate_dps = fabs(g_imu_turn_rate_dps);
+	track_t12_arc_ratio = (float)direction * TRACK_T12_HALF_ENTRY_RATIO;
+	track_t12_reacquire_start_ratio = 0.0f;
 	g_track_test_t12_direction = direction;
 	g_track_test_t12_half_active = 1U;
 	g_track_t12_entry_source = source;
@@ -509,33 +559,126 @@ static uint8 track_t12_exit_matches(int8 direction)
 		&& error <= -0.25f;
 }
 
-static uint8 track_t12_exit_trigger_now(void)
+static float track_t12_smoothstep(float value)
 {
-	uint8 trigger_mask = 0U;
-
-	if (track_t12_angle >= TRACK_T12_HALF_ANGLE_EXIT)
-	{
-		trigger_mask |= TRACK_T12_EXIT_TRIGGER_ANGLE;
-	}
-	if (track_t12_state_ticks >= TRACK_T12_HALF_MAX_TICKS)
-	{
-		trigger_mask |= TRACK_T12_EXIT_TRIGGER_TIME;
-	}
-	if (track_t12_angle >= TRACK_T12_HALF_ANGLE_MIN
-		&& track_t12_exit_matches(g_track_test_t12_direction))
-	{
-		trigger_mask |= TRACK_T12_EXIT_TRIGGER_SENSOR;
-	}
-	return trigger_mask;
+	value = limit_function(value, 0.0f, 1.0f);
+	return value * value * (3.0f - 2.0f * value);
 }
 
-static void track_t12_capture_exit_diagnostic(uint8 post_handoff)
+static void track_t12_store_line_history(void)
+{
+	track_t12_previous_line_sum = inductance4_get_line_sum();
+	track_t12_previous_error_abs = fabs(error);
+}
+
+static uint8 track_t12_reacquire_sample_matches(int8 direction)
+{
+	uint16 sum = inductance4_get_line_sum();
+	float error_abs = fabs(error);
+	uint8 strength_stable;
+	uint8 centering_stable;
+	uint8 trend_improving;
+	uint8 matched;
+
+	strength_stable = (uint8)(
+		sum + TRACK_T12_REACQUIRE_SUM_TOLERANCE
+			>= track_t12_previous_line_sum);
+	centering_stable = (uint8)(
+		error_abs <= track_t12_previous_error_abs
+			+ TRACK_T12_REACQUIRE_ERROR_TOLERANCE);
+	trend_improving = (uint8)(
+		strength_stable
+		&& centering_stable
+		&& (sum >= track_t12_previous_line_sum
+			|| error_abs <= track_t12_previous_error_abs));
+	matched = (uint8)(
+		track_t12_exit_matches(direction) && trend_improving);
+
+	track_t12_previous_line_sum = sum;
+	track_t12_previous_error_abs = error_abs;
+	return matched;
+}
+
+static void track_t12_update_arc_control(void)
+{
+	float feedforward_ratio;
+	float rate_error;
+	float rate_error_abs;
+	float correction;
+	float profile;
+	float line_feedback;
+
+	if (track_t12_state == TRACK_T12_ENTRY_RAMP)
+	{
+		profile = track_t12_smoothstep(
+			(float)track_t12_state_ticks
+				/ (float)TRACK_T12_ENTRY_RAMP_TICKS);
+		feedforward_ratio = TRACK_T12_HALF_ENTRY_RATIO
+			+ (TRACK_T12_HALF_RATIO - TRACK_T12_HALF_ENTRY_RATIO)
+				* profile;
+		track_t12_target_rate_dps = TRACK_T12_RATE_ENTRY_DPS
+			+ (TRACK_T12_RATE_TARGET_DPS - TRACK_T12_RATE_ENTRY_DPS)
+				* profile;
+	}
+	else if (track_t12_state == TRACK_T12_EXIT_TAPER)
+	{
+		profile = track_t12_smoothstep(
+			(track_t12_angle - TRACK_T12_TAPER_START_DEG)
+				/ (TRACK_T12_TAPER_END_DEG - TRACK_T12_TAPER_START_DEG));
+		feedforward_ratio = TRACK_T12_HALF_RATIO
+			- (TRACK_T12_HALF_RATIO - TRACK_T12_HALF_TAIL_RATIO)
+				* profile;
+		track_t12_target_rate_dps = TRACK_T12_RATE_TARGET_DPS
+			- (TRACK_T12_RATE_TARGET_DPS - TRACK_T12_RATE_TAIL_DPS)
+				* profile;
+	}
+	else
+	{
+		feedforward_ratio = TRACK_T12_HALF_RATIO;
+		track_t12_target_rate_dps = TRACK_T12_RATE_TARGET_DPS;
+	}
+
+	track_t12_actual_rate_dps = fabs(g_imu_turn_rate_dps);
+	rate_error = track_t12_target_rate_dps - track_t12_actual_rate_dps;
+	track_t12_rate_integral += rate_error * 0.01f;
+	track_t12_rate_integral = limit_function(
+		track_t12_rate_integral,
+		-TRACK_T12_RATE_I_LIMIT,
+		TRACK_T12_RATE_I_LIMIT);
+	correction = TRACK_T12_RATE_KP * rate_error
+		+ TRACK_T12_RATE_KI * track_t12_rate_integral;
+	correction = limit_function(
+		correction,
+		-TRACK_T12_RATE_CORRECTION_LIMIT,
+		TRACK_T12_RATE_CORRECTION_LIMIT);
+	feedforward_ratio = limit_function(
+		feedforward_ratio + correction,
+		TRACK_T12_ARC_RATIO_MIN,
+		TRACK_T12_ARC_RATIO_MAX);
+	line_feedback = TRACK_T12_LINE_FEEDBACK
+		* track_line_turn_ratio_raw(error);
+	track_t12_arc_ratio = limit_function(
+		(float)g_track_test_t12_direction * feedforward_ratio
+			+ line_feedback,
+		-TRACK_T12_ARC_RATIO_MAX,
+		TRACK_T12_ARC_RATIO_MAX);
+
+	g_track_t12_target_rate_x10 = (uint16)(track_t12_target_rate_dps * 10.0f);
+	g_track_t12_actual_rate_x10 = (uint16)(track_t12_actual_rate_dps * 10.0f);
+	rate_error_abs = fabs(rate_error);
+	if ((uint16)(rate_error_abs * 10.0f) > g_track_t12_rate_error_peak_x10)
+	{
+		g_track_t12_rate_error_peak_x10 = (uint16)(rate_error_abs * 10.0f);
+	}
+}
+
+static void track_t12_capture_exit_diagnostic(uint8 post_reacquire)
 {
 	uint16 angle_x10 = (uint16)(track_t12_angle * 10.0f);
 	int16 error_x1000 = (int16)(error * 1000.0f);
 	uint16 sum = inductance4_get_line_sum();
 
-	if (post_handoff)
+	if (post_reacquire)
 	{
 		g_track_t12_post_delay_ticks = (uint8)track_t12_state_ticks;
 		g_track_t12_post_angle_x10 = angle_x10;
@@ -550,13 +693,37 @@ static void track_t12_capture_exit_diagnostic(uint8 post_handoff)
 	}
 
 	g_track_t12_exit_angle_x10 = angle_x10;
-	g_track_t12_exit_half_ticks = track_t12_state_ticks;
+	g_track_t12_exit_half_ticks = track_t12_half_ticks;
 	g_track_t12_exit_norm_l = (uint8)g_inductance4[INDUCTANCE4_L].normalized;
 	g_track_t12_exit_norm_lm = (uint8)g_inductance4[INDUCTANCE4_LM].normalized;
 	g_track_t12_exit_norm_rm = (uint8)g_inductance4[INDUCTANCE4_RM].normalized;
 	g_track_t12_exit_norm_r = (uint8)g_inductance4[INDUCTANCE4_R].normalized;
 	g_track_t12_exit_error_x1000 = error_x1000;
 	g_track_t12_exit_sum = sum;
+}
+
+static void track_t12_begin_reacquire(uint8 trigger_mask)
+{
+	track_t12_exit_trigger_pending |= trigger_mask;
+	g_track_t12_exit_trigger_mask = track_t12_exit_trigger_pending;
+	g_track_t12_exit_state = track_t12_state;
+	g_track_t12_reacquire_confirm_count = track_t12_exit_ticks;
+	g_track_t12_exit_ratio_x1000 = (uint16)(
+		fabs(track_t12_turn_filtered) * 1000.0f);
+	track_t12_capture_exit_diagnostic(0U);
+
+	track_t12_reacquire_start_ratio = track_t12_turn_filtered;
+	if ((trigger_mask & (TRACK_T12_EXIT_TRIGGER_ANGLE
+		| TRACK_T12_EXIT_TRIGGER_TIME)) != 0U)
+	{
+		/* A hard exit must stop adding arc even when the wire was not reacquired. */
+		track_t12_reacquire_start_ratio = 0.0f;
+		track_t12_turn_filtered = 0.0f;
+	}
+	track_t12_rate_integral = 0.0f;
+	track_t12_target_rate_dps = 0.0f;
+	track_t12_state = TRACK_T12_REACQUIRE;
+	track_t12_state_ticks = 0U;
 }
 
 static uint8 track_t12_start_ready(void)
@@ -690,6 +857,8 @@ static void track_test_apply_soft_start_sync(void)
 
 static void track_t12_update(void)
 {
+	uint8 trigger_mask;
+
 	if (track_t12_state_ticks < 65535U)
 	{
 		track_t12_state_ticks++;
@@ -772,47 +941,96 @@ static void track_t12_update(void)
 			}
 			break;
 
-		case TRACK_T12_HALF:
-		{
-			uint8 exit_trigger_mask = 0U;
-
+		case TRACK_T12_ENTRY_RAMP:
+		case TRACK_T12_CONSTANT_CURVATURE:
+		case TRACK_T12_EXIT_TAPER:
+			if (track_t12_half_ticks < 65535U)
+			{
+				track_t12_half_ticks++;
+			}
 			track_t12_angle += fabs(g_imu_turn_rate_dps) * 0.01f;
-			if (track_t12_state_ticks >= TRACK_T12_HALF_MIN_TICKS)
+
+			if (track_t12_state == TRACK_T12_ENTRY_RAMP
+				&& track_t12_state_ticks >= TRACK_T12_ENTRY_RAMP_TICKS)
 			{
-				exit_trigger_mask = track_t12_exit_trigger_now();
+				track_t12_state = TRACK_T12_CONSTANT_CURVATURE;
+				track_t12_state_ticks = 0U;
 			}
-			if (exit_trigger_mask != 0U)
+			if (track_t12_state == TRACK_T12_CONSTANT_CURVATURE
+				&& track_t12_angle >= TRACK_T12_TAPER_START_DEG)
 			{
-				track_t12_exit_trigger_pending |= exit_trigger_mask;
-				if (track_t12_exit_ticks < TRACK_T12_EXIT_CONFIRM_TICKS)
-				{
-					track_t12_exit_ticks++;
-				}
-				if (track_t12_exit_ticks >= TRACK_T12_EXIT_CONFIRM_TICKS)
-				{
-					g_track_t12_exit_trigger_mask = track_t12_exit_trigger_pending;
-					track_t12_capture_exit_diagnostic(0U);
-					track_t12_state = TRACK_T12_HANDOFF;
-					track_t12_state_ticks = 0U;
-				}
-			}
-			else
-			{
+				track_t12_state = TRACK_T12_EXIT_TAPER;
+				track_t12_state_ticks = 0U;
 				track_t12_exit_ticks = 0U;
 				track_t12_exit_trigger_pending = 0U;
 			}
-			break;
-		}
 
-		case TRACK_T12_HANDOFF:
-			if (!g_track_t12_post_valid)
+			if (track_t12_state == TRACK_T12_EXIT_TAPER)
 			{
-				track_t12_angle += fabs(g_imu_turn_rate_dps) * 0.01f;
-				if (track_t12_state_ticks >= TRACK_T12_HANDOFF_TICKS)
+				trigger_mask = 0U;
+				if (track_t12_angle >= TRACK_T12_REACQUIRE_MIN_DEG)
+				{
+					if (track_t12_reacquire_sample_matches(
+						g_track_test_t12_direction))
+					{
+						if (track_t12_exit_ticks
+							< TRACK_T12_REACQUIRE_CONFIRM_TICKS)
+						{
+							track_t12_exit_ticks++;
+						}
+					}
+					else
+					{
+						track_t12_exit_ticks = 0U;
+					}
+				}
+				else
+				{
+					track_t12_store_line_history();
+				}
+
+				if (track_t12_exit_ticks
+					>= TRACK_T12_REACQUIRE_CONFIRM_TICKS)
+				{
+					trigger_mask |= TRACK_T12_EXIT_TRIGGER_SENSOR;
+				}
+				if (track_t12_angle >= TRACK_T12_HARD_EXIT_DEG)
+				{
+					trigger_mask |= TRACK_T12_EXIT_TRIGGER_ANGLE;
+				}
+				if (track_t12_half_ticks >= TRACK_T12_HALF_MAX_TICKS)
+				{
+					trigger_mask |= TRACK_T12_EXIT_TRIGGER_TIME;
+				}
+				if (trigger_mask != 0U)
+				{
+					track_t12_begin_reacquire(trigger_mask);
+				}
+			}
+
+			if (track_t12_state == TRACK_T12_ENTRY_RAMP
+				|| track_t12_state == TRACK_T12_CONSTANT_CURVATURE
+				|| track_t12_state == TRACK_T12_EXIT_TAPER)
+			{
+				track_t12_update_arc_control();
+			}
+			break;
+
+		case TRACK_T12_REACQUIRE:
+			track_t12_angle += fabs(g_imu_turn_rate_dps) * 0.01f;
+			if (track_t12_state_ticks >= TRACK_T12_REACQUIRE_BLEND_TICKS)
+			{
+				if (!g_track_t12_post_valid)
 				{
 					track_t12_capture_exit_diagnostic(1U);
 				}
+				track_t12_state = TRACK_T12_NORMAL;
+				track_t12_state_ticks = 0U;
+				g_track_test_t12_half_active = 0U;
 			}
+			break;
+
+		case TRACK_T12_NORMAL:
 			break;
 		default:
 			track_t12_state = TRACK_T12_APPROACH;
@@ -822,10 +1040,9 @@ static void track_t12_update(void)
 
 static float track_t12_turn_ratio(float track_error)
 {
-	float half_ratio;
-	float handoff_ratio;
 	float requested_ratio;
-	float taper;
+	float blend;
+	float filter_alpha = TRACK_T12_TURN_FILTER_ALPHA;
 
 	if (!track_t12_start_ready())
 	{
@@ -834,46 +1051,27 @@ static float track_t12_turn_ratio(float track_error)
 		return 0.0f;
 	}
 
-	if (track_t12_state == TRACK_T12_HALF)
+	if (track_t12_state == TRACK_T12_ENTRY_RAMP
+		|| track_t12_state == TRACK_T12_CONSTANT_CURVATURE
+		|| track_t12_state == TRACK_T12_EXIT_TAPER)
 	{
-		half_ratio = TRACK_T12_HALF_ENTRY_RATIO;
-		if (track_t12_state_ticks < TRACK_T12_HALF_RAMP_TICKS)
-		{
-			half_ratio += (TRACK_T12_HALF_RATIO - TRACK_T12_HALF_ENTRY_RATIO)
-				* (float)track_t12_state_ticks / (float)TRACK_T12_HALF_RAMP_TICKS;
-		}
-		else
-		{
-			half_ratio = TRACK_T12_HALF_RATIO;
-		}
-		/* Ease the latter half of the arc so the exit does not overshoot. */
-		if (track_t12_angle > TRACK_T12_HALF_TAPER_START_DEG)
-		{
-			taper = (track_t12_angle - TRACK_T12_HALF_TAPER_START_DEG)
-				/ (TRACK_T12_HALF_TAPER_END_DEG
-					- TRACK_T12_HALF_TAPER_START_DEG);
-			taper = limit_function(taper, 0.0f, 1.0f);
-			taper = taper * taper * (3.0f - 2.0f * taper);
-			half_ratio -= (half_ratio - TRACK_T12_HALF_TAIL_RATIO) * taper;
-		}
-		requested_ratio = (float)g_track_test_t12_direction * half_ratio
-			+ TRACK_T12_LINE_FEEDBACK * track_line_turn_ratio_raw(track_error);
+		requested_ratio = track_t12_arc_ratio;
 	}
-	else if (track_t12_state == TRACK_T12_HANDOFF
-		&& track_t12_state_ticks < TRACK_T12_HANDOFF_TICKS)
+	else if (track_t12_state == TRACK_T12_REACQUIRE)
 	{
-		handoff_ratio = (float)(TRACK_T12_HANDOFF_TICKS - track_t12_state_ticks)
-			/ (float)TRACK_T12_HANDOFF_TICKS;
-		requested_ratio = -(float)g_track_test_t12_direction * TRACK_T12_EXIT_RATIO
-			* handoff_ratio + track_line_turn_ratio_raw(track_error)
-			* (1.0f - handoff_ratio);
+		blend = track_t12_smoothstep(
+			(float)track_t12_state_ticks
+				/ (float)TRACK_T12_REACQUIRE_BLEND_TICKS);
+		requested_ratio = track_t12_reacquire_start_ratio * (1.0f - blend)
+			+ track_line_turn_ratio_raw(track_error) * blend;
+		filter_alpha = TRACK_T12_REACQUIRE_FILTER_ALPHA;
 	}
 	else
 	{
 		requested_ratio = track_line_turn_ratio_raw(track_error);
 	}
 
-	track_t12_turn_filtered += TRACK_T12_TURN_FILTER_ALPHA
+	track_t12_turn_filtered += filter_alpha
 		* (requested_ratio - track_t12_turn_filtered);
 	return track_t12_turn_filtered;
 }
