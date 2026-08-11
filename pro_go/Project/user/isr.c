@@ -164,7 +164,7 @@ static uint8 scope_test_phase = 0U;
 #define TRACK_T12_START_SYNC_GAIN            0.75f
 #define TRACK_T12_START_SYNC_LIMIT           0.45f
 #define TRACK_T12_START_BALANCE_X1000      700U
-#define TRACK_T12_START_FALLBACK_X1000     450U
+#define TRACK_T12_START_FALLBACK_X1000     350U
 #define TRACK_T12_START_FALLBACK_SAMPLES    40U
 #define TRACK_T12_START_INSTANT_RAW_MIN       8U
 #define TRACK_T12_START_INSTANT_X1000       600U
@@ -823,6 +823,12 @@ static uint8 track_t12_start_ready(void)
 	{
 		return 1U;
 	}
+	smaller_total = g_track_test_start_left_total
+		< g_track_test_start_right_total
+		? g_track_test_start_left_total : g_track_test_start_right_total;
+	larger_total = g_track_test_start_left_total
+		> g_track_test_start_right_total
+		? g_track_test_start_left_total : g_track_test_start_right_total;
 	if (track_t12_start_balance_last_sample
 		!= g_track_test_start_sample_count)
 	{
@@ -850,12 +856,6 @@ static uint8 track_t12_start_ready(void)
 	if (g_track_test_start_left_total >= TRACK_TEST_T12_START_SYNC_RELEASE_COUNT
 		&& g_track_test_start_right_total >= TRACK_TEST_T12_START_SYNC_RELEASE_COUNT)
 	{
-		smaller_total = g_track_test_start_left_total
-			< g_track_test_start_right_total
-			? g_track_test_start_left_total : g_track_test_start_right_total;
-		larger_total = g_track_test_start_left_total
-			> g_track_test_start_right_total
-			? g_track_test_start_left_total : g_track_test_start_right_total;
 		if (smaller_total * 1000UL
 			>= larger_total * TRACK_T12_START_BALANCE_X1000)
 		{
@@ -865,6 +865,9 @@ static uint8 track_t12_start_ready(void)
 	if (release_reason == 0U
 		&& g_track_test_start_sample_count
 			>= TRACK_T12_START_FALLBACK_SAMPLES
+		&& larger_total > 0UL
+		&& smaller_total * 1000UL
+			>= larger_total * TRACK_T12_START_FALLBACK_X1000
 		&& track_t12_start_balance_ticks
 			>= TRACK_T12_START_INSTANT_TICKS)
 	{
