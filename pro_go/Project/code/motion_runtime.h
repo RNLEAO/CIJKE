@@ -9,8 +9,13 @@
 #define MOTOR_TEST_BOTH_PWM_VALUE 2000U
 #define MOTOR_TEST_DURATION_MS  1000U
 #define MOTOR_TEST_PRECHECK_MS  50U
+#define STALL_DIAG_PRECHECK_MS  50U
+#define STALL_DIAG_STAGE_MS     100U
+#define STALL_DIAG_PWM_LOW_VALUE  600U
+#define STALL_DIAG_PWM_MID_VALUE 1000U
+#define STALL_DIAG_PWM_HIGH_VALUE 1400U
 #define ENCODER_TEST_DURATION_MS 15000U
-#define TRACK_TEST_T10_TARGET_VALUE 215U
+#define TRACK_TEST_T10_TARGET_VALUE 180U
 #define TRACK_TEST_T12_TARGET_VALUE 120U
 #define TRACK_TEST_TARGET_VALUE TRACK_TEST_T10_TARGET_VALUE
 #define TRACK_TEST_DURATION_MS  3000U
@@ -18,7 +23,8 @@
 #define TRACK_TEST_STARTUP_GRACE_MS 500U
 #define TRACK_TEST_START_ASSIST_ENABLED 1U
 #define TRACK_TEST_STEERING_ENABLED 1U
-#define TRACK_TEST_TURN_GAIN 0.15f
+#define TRACK_TEST_T10_TURN_GAIN 0.12f
+#define TRACK_TEST_T12_LINE_TURN_GAIN 0.12f
 #define TRACK_TEST_TURN_DEADBAND 0.02f
 #define TRACK_TEST_TURN_RATIO_LIMIT 0.10f
 #define TRACK_TEST_MODE_T10 0U
@@ -31,6 +37,20 @@
 #define TRACK_TEST_START_BREAKAWAY_PWM 600.0f
 #define TRACK_TEST_T10_START_RELEASE_COUNT 100U
 #define TRACK_TEST_T12_START_SYNC_RELEASE_COUNT 300U
+#define TRACK_TEST_T10_LEFT_BREAKAWAY_PWM 1400.0f
+#define TRACK_TEST_T10_LEFT_RETRY_PWM 1700.0f
+#define TRACK_TEST_T10_LEFT_FINAL_PWM 2000.0f
+#define TRACK_TEST_T10_RIGHT_BREAKAWAY_PWM 600.0f
+#define TRACK_TEST_T10_RIGHT_RETRY_PWM 1000.0f
+#define TRACK_TEST_T10_RIGHT_FINAL_PWM 1400.0f
+#define TRACK_TEST_T10_BREAKAWAY_RAMP_TICKS 10U
+#define TRACK_TEST_T10_RETRY_SAMPLE 40U
+#define TRACK_TEST_T10_FINAL_SAMPLE 60U
+#define TRACK_TEST_T10_START_MOVE_TOTAL 8U
+#define TRACK_TEST_T10_START_RAW_MIN 2U
+#define TRACK_TEST_T10_START_CONFIRM_TICKS 2U
+#define TRACK_TEST_T10_RELEASE_TARGET 60.0f
+#define TRACK_TEST_T10_STEER_BLEND_MS 100U
 #endif
 
 typedef enum
@@ -100,6 +120,20 @@ typedef enum
     TRACK_TEST_RESULT_PROTECT
 } TrackTestResult;
 
+typedef enum
+{
+    STALL_DIAG_RESULT_IDLE = 0,
+    STALL_DIAG_RESULT_RUNNING,
+    STALL_DIAG_RESULT_PASS,
+    STALL_DIAG_RESULT_STOPPED,
+    STALL_DIAG_RESULT_LEFT_STALL,
+    STALL_DIAG_RESULT_RIGHT_STALL,
+    STALL_DIAG_RESULT_IMU,
+    STALL_DIAG_RESULT_PROTECT,
+    STALL_DIAG_RESULT_ENCODER_MODE,
+    STALL_DIAG_RESULT_ENCODER_NOISE
+} StallDiagResult;
+
 extern volatile uint8 g_imu_runtime_state;
 extern volatile uint8 g_motion_run_unlocked;
 extern volatile uint8 g_motion_protect_reason;
@@ -137,11 +171,20 @@ extern volatile uint16 g_encoder_test_ticks_remaining;
 extern volatile uint8 g_track_test_result;
 extern volatile uint8 g_track_test_mode;
 extern volatile int8 g_track_test_t12_direction;
+extern volatile int8 g_track_test_t12_force_direction;
 extern volatile uint8 g_track_test_t12_half_active;
 extern volatile uint16 g_track_test_ticks_remaining;
 extern volatile uint16 g_track_test_start_sample_count;
 extern volatile uint32 g_track_test_start_left_total;
 extern volatile uint32 g_track_test_start_right_total;
+extern volatile uint8 g_track_test_t10_start_release_mask;
+extern volatile uint16 g_track_test_t10_start_release_sample_count;
+extern volatile uint32 g_track_test_t10_start_release_left_total;
+extern volatile uint32 g_track_test_t10_start_release_right_total;
+extern volatile uint8 g_track_test_t10_start_stage;
+extern volatile uint16 g_track_test_t10_start_peak_pwm;
+extern volatile uint8 g_track_test_t10_right_start_stage;
+extern volatile uint16 g_track_test_t10_right_start_peak_pwm;
 
 extern float g_track_duty_limit;
 extern float g_speed_pid_delta_limit;
@@ -198,6 +241,25 @@ const char *motion_runtime_motor_test_side_text(void);
 const char *motion_runtime_motor_test_result_text(void);
 uint8 motion_runtime_motor_test_both_passed(void);
 
+uint8 motion_runtime_stall_diag_start(MotorTestSide side);
+uint8 motion_runtime_stall_diag_stop(void);
+void motion_runtime_stall_diag_tick(void);
+uint8 motion_runtime_stall_diag_is_active(void);
+StallDiagResult motion_runtime_stall_diag_take_event(void);
+StallDiagResult motion_runtime_stall_diag_result(void);
+const char *motion_runtime_stall_diag_result_text(void);
+const char *motion_runtime_stall_diag_requested_side_text(void);
+const char *motion_runtime_stall_diag_active_side_text(void);
+uint8 motion_runtime_stall_diag_stage(void);
+uint16 motion_runtime_stall_diag_applied_pwm(void);
+uint32 motion_runtime_stall_diag_left_total(void);
+uint32 motion_runtime_stall_diag_right_total(void);
+uint16 motion_runtime_stall_diag_left_peak(void);
+uint16 motion_runtime_stall_diag_right_peak(void);
+uint16 motion_runtime_stall_diag_left_breakaway_pwm(void);
+uint16 motion_runtime_stall_diag_right_breakaway_pwm(void);
+uint8 motion_runtime_stall_diag_pass_mask(void);
+
 uint8 motion_runtime_encoder_test_start(MotorTestSide side);
 uint8 motion_runtime_encoder_test_stop(void);
 void motion_runtime_encoder_test_tick(void);
@@ -213,9 +275,15 @@ const char *motion_runtime_encoder_test_result_text(void);
 
 uint8 motion_runtime_track_test_start(void);
 uint8 motion_runtime_track_test_start_mode(uint8 mode);
+void motion_runtime_set_track_test_t12_force_direction(int8 direction);
 uint8 motion_runtime_track_test_stop(void);
 void motion_runtime_track_test_tick(void);
 uint8 motion_runtime_track_test_is_active(void);
+void motion_runtime_track_t10_startup_tick(void);
+uint8 motion_runtime_track_t10_startup_is_active(void);
+float motion_runtime_track_t10_left_start_pwm(void);
+float motion_runtime_track_t10_right_start_pwm(void);
+float motion_runtime_track_t10_steering_scale(void);
 uint16 motion_runtime_track_test_remaining_ms(void);
 uint16 motion_runtime_track_test_sample_count(void);
 int32 motion_runtime_track_test_left_average_x10(void);

@@ -4,6 +4,7 @@
 #include "common.h"
 
 void display_inductance4_data(void);
+void display_inductance4_diagnostic(void);
 void display_inductance4_calibration(uint8 key_press);
 
 #endif
