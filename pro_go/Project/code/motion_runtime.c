@@ -19,11 +19,13 @@
 #define ENCODER_SPIKE_FAULT_TICKS           3U
 
 #define MOTOR_TEST_CONTROL_PERIOD_MS           5U
+#define RAW_DRIVE_DURATION_TICKS       (RAW_DRIVE_DURATION_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
 #define MOTOR_TEST_PWM                    ((float)MOTOR_TEST_PWM_VALUE)
 #define MOTOR_TEST_BOTH_PWM               ((float)MOTOR_TEST_BOTH_PWM_VALUE)
 #define MOTOR_TEST_DURATION_TICKS         (MOTOR_TEST_DURATION_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
 #define MOTOR_TEST_PRECHECK_TICKS     (MOTOR_TEST_PRECHECK_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
-#define MOTOR_TEST_STARTUP_GRACE_TICKS      100U
+#define MOTOR_TEST_BOOST_DURATION_TICKS (MOTOR_TEST_BOOST_DURATION_MS / MOTOR_TEST_CONTROL_PERIOD_MS)
+#define MOTOR_TEST_BOOST_STALL_GRACE_TICKS   10U
 #define MOTOR_TEST_STALL_TICKS               20U
 #define MOTOR_TEST_DIRECTION_FAULT_TICKS      3U
 #define MOTOR_TEST_NOISE_FAULT_TICKS          3U
@@ -51,6 +53,14 @@
 #if TRACK_TEST_START_ASSIST_ENABLED
 #define TRACK_TEST_PID_RISE_LIMIT          40.0f
 #define TRACK_TEST_PID_FALL_LIMIT          80.0f
+#endif
+
+#if RAW_DRIVE_PWM_VALUE > PWM_DUTY_MAX
+#error RAW drive PWM exceeds the driver duty scale.
+#endif
+
+#if MOTOR_TEST_BOOST_PWM_VALUE > PWM_DUTY_MAX
+#error Motor-test boost PWM exceeds the driver duty scale.
 #endif
 
 typedef struct
@@ -101,6 +111,14 @@ float g_motor_pwm_slew_per_tick = 25.0f;
 
 static MotorOutputState left_output_state = {0.0f, 0, 0, 0U};
 static MotorOutputState right_output_state = {0.0f, 0, 0, 0U};
+static volatile uint8 raw_drive_active = 0U;
+static volatile uint8 raw_drive_event = RAW_DRIVE_EVENT_NONE;
+static volatile uint16 raw_drive_ticks_remaining = 0U;
+static volatile uint16 raw_drive_sample_count = 0U;
+static volatile uint32 raw_drive_left_total = 0U;
+static volatile uint32 raw_drive_right_total = 0U;
+static volatile uint16 raw_drive_left_peak = 0U;
+static volatile uint16 raw_drive_right_peak = 0U;
 
 static uint8 left_stall_ticks = 0U;
 static uint8 right_stall_ticks = 0U;
@@ -123,6 +141,18 @@ static volatile uint16 motor_test_left_peak = 0U;
 static volatile uint16 motor_test_right_peak = 0U;
 static volatile uint16 motor_test_left_idle_peak = 0U;
 static volatile uint16 motor_test_right_idle_peak = 0U;
+static volatile uint8 motor_test_boost_active = 0U;
+static volatile uint8 motor_test_boost_ticks_remaining = 0U;
+static volatile uint16 motor_test_boost_sample_count = 0U;
+static volatile uint32 motor_test_boost_left_total = 0U;
+static volatile uint32 motor_test_boost_right_total = 0U;
+static volatile uint16 motor_test_boost_left_peak = 0U;
+static volatile uint16 motor_test_boost_right_peak = 0U;
+static volatile uint16 motor_test_hold_sample_count = 0U;
+static volatile uint32 motor_test_hold_left_total = 0U;
+static volatile uint32 motor_test_hold_right_total = 0U;
+static volatile uint16 motor_test_hold_left_peak = 0U;
+static volatile uint16 motor_test_hold_right_peak = 0U;
 static volatile uint8 stall_diag_active = 0U;
 static volatile uint8 stall_diag_event = STALL_DIAG_RESULT_IDLE;
 static volatile uint8 stall_diag_requested_side = MOTOR_TEST_SIDE_NONE;
@@ -264,6 +294,8 @@ static void motion_motor_test_finish(
     motor_test_right_direction_fault_ticks = 0U;
     motor_test_noise_ticks = 0U;
     motor_test_precheck_ticks_remaining = 0U;
+    motor_test_boost_active = 0U;
+    motor_test_boost_ticks_remaining = 0U;
     motion_runtime_force_stop();
     g_motor_test_result = (uint8)result;
     if (post_event)
@@ -880,6 +912,301 @@ void motion_runtime_force_stop(void)
     right_output_state.deadtime_ticks = 0U;
     g_motor_left_applied_pwm = 0.0f;
     g_motor_right_applied_pwm = 0.0f;
+    raw_drive_active = 0U;
+    raw_drive_ticks_remaining = 0U;
+}
+
+uint8 motion_runtime_raw_drive_start(void)
+{
+    if (raw_drive_active
+        || stall_diag_active
+        || motor_test_active
+        || encoder_test_active
+        || track_test_active
+        || g_motion_run_unlocked
+        || g_imu_runtime_state != IMU_RUNTIME_READY
+        || g_motion_protect_reason != MOTION_PROTECT_NONE
+        || element4_is_enabled()
+        || negative_pressure_enabled
+        || negative_pressure_armed
+        || negative_pressure_state != NEGATIVE_PRESSURE_STATE_OFF
+        || negative_pressure_real_output_percent != 0U)
+    {
+        return 0U;
+    }
+
+    interrupt_global_disable();
+    motion_runtime_force_stop();
+    ctimer_count_clean(MOTOR1_ENCODER);
+    ctimer_count_clean(MOTOR2_ENCODER);
+    g_encoder_left_raw = 0U;
+    g_encoder_right_raw = 0U;
+    g_encoder_left_signed = 0;
+    g_encoder_right_signed = 0;
+    raw_drive_event = RAW_DRIVE_EVENT_NONE;
+    raw_drive_ticks_remaining = RAW_DRIVE_DURATION_TICKS;
+    raw_drive_sample_count = 0U;
+    raw_drive_left_total = 0UL;
+    raw_drive_right_total = 0UL;
+    raw_drive_left_peak = 0U;
+    raw_drive_right_peak = 0U;
+    LEFT_MOTOR_DIR = LEFT_MOTOR_FORWARD_LEVEL;
+    RIGHT_MOTOR_DIR = RIGHT_MOTOR_FORWARD_LEVEL;
+    pwm_set_duty(LEFT_MOTOR_PWM, RAW_DRIVE_PWM_VALUE);
+    pwm_set_duty(RIGHT_MOTOR_PWM, RAW_DRIVE_PWM_VALUE);
+    left_output_state.applied_abs_pwm = (float)RAW_DRIVE_PWM_VALUE;
+    left_output_state.applied_sign = 1;
+    right_output_state.applied_abs_pwm = (float)RAW_DRIVE_PWM_VALUE;
+    right_output_state.applied_sign = 1;
+    g_motor_left_applied_pwm = (float)RAW_DRIVE_PWM_VALUE;
+    g_motor_right_applied_pwm = (float)RAW_DRIVE_PWM_VALUE;
+    raw_drive_active = 1U;
+    interrupt_global_enable();
+    return 1U;
+}
+
+uint8 motion_runtime_motor_protection_is_clearable(void)
+{
+    switch ((MotionProtectReason)g_motion_protect_reason)
+    {
+        case MOTION_PROTECT_ENCODER_LEFT_STALL:
+        case MOTION_PROTECT_ENCODER_RIGHT_STALL:
+        case MOTION_PROTECT_ENCODER_LEFT_DIRECTION:
+        case MOTION_PROTECT_ENCODER_RIGHT_DIRECTION:
+        case MOTION_PROTECT_ENCODER_SPIKE:
+        case MOTION_PROTECT_SPEED_SATURATION:
+        case MOTION_PROTECT_ENCODER_MODE:
+        case MOTION_PROTECT_ENCODER_NOISE:
+            return 1U;
+        default:
+            return 0U;
+    }
+}
+
+uint8 motion_runtime_clear_motor_protection(void)
+{
+    if (!motion_runtime_motor_protection_is_clearable())
+    {
+        return 0U;
+    }
+    return motion_runtime_clear_protection();
+}
+
+uint8 motion_runtime_raw_drive_stop(void)
+{
+    uint8 was_active;
+
+    interrupt_global_disable();
+    was_active = raw_drive_active;
+    motion_runtime_force_stop();
+    if (was_active)
+    {
+        raw_drive_event = RAW_DRIVE_EVENT_STOPPED;
+    }
+    interrupt_global_enable();
+    return was_active;
+}
+
+void motion_runtime_raw_drive_tick(void)
+{
+    uint16 left_raw;
+    uint16 right_raw;
+
+    if (!raw_drive_active)
+    {
+        return;
+    }
+
+    left_raw = g_encoder_left_raw;
+    right_raw = g_encoder_right_raw;
+    if (raw_drive_sample_count < 65535U)
+    {
+        raw_drive_sample_count++;
+    }
+    if (raw_drive_left_total <= (0xFFFFFFFFUL - (uint32)left_raw))
+    {
+        raw_drive_left_total += (uint32)left_raw;
+    }
+    else
+    {
+        raw_drive_left_total = 0xFFFFFFFFUL;
+    }
+    if (raw_drive_right_total <= (0xFFFFFFFFUL - (uint32)right_raw))
+    {
+        raw_drive_right_total += (uint32)right_raw;
+    }
+    else
+    {
+        raw_drive_right_total = 0xFFFFFFFFUL;
+    }
+    if (left_raw > raw_drive_left_peak)
+    {
+        raw_drive_left_peak = left_raw;
+    }
+    if (right_raw > raw_drive_right_peak)
+    {
+        raw_drive_right_peak = right_raw;
+    }
+    if (g_imu_runtime_state != IMU_RUNTIME_READY
+        || g_motion_protect_reason != MOTION_PROTECT_NONE
+        || g_motion_run_unlocked
+        || element4_is_enabled()
+        || negative_pressure_enabled
+        || negative_pressure_armed
+        || negative_pressure_state != NEGATIVE_PRESSURE_STATE_OFF
+        || negative_pressure_real_output_percent != 0U)
+    {
+        motion_runtime_force_stop();
+        raw_drive_event = RAW_DRIVE_EVENT_ABORTED;
+        return;
+    }
+
+    if (raw_drive_ticks_remaining > 0U)
+    {
+        raw_drive_ticks_remaining--;
+    }
+    if (raw_drive_ticks_remaining == 0U)
+    {
+        motion_runtime_force_stop();
+        raw_drive_event = RAW_DRIVE_EVENT_DONE;
+    }
+}
+
+uint8 motion_runtime_raw_drive_is_active(void)
+{
+    return raw_drive_active;
+}
+
+uint8 motion_runtime_raw_drive_take_event(void)
+{
+    uint8 event;
+
+    interrupt_global_disable();
+    event = raw_drive_event;
+    raw_drive_event = RAW_DRIVE_EVENT_NONE;
+    interrupt_global_enable();
+    return event;
+}
+
+uint16 motion_runtime_raw_drive_sample_count(void)
+{
+    uint16 value;
+
+    interrupt_global_disable();
+    value = raw_drive_sample_count;
+    interrupt_global_enable();
+    return value;
+}
+
+uint32 motion_runtime_raw_drive_left_total(void)
+{
+    uint32 value;
+
+    interrupt_global_disable();
+    value = raw_drive_left_total;
+    interrupt_global_enable();
+    return value;
+}
+
+uint32 motion_runtime_raw_drive_right_total(void)
+{
+    uint32 value;
+
+    interrupt_global_disable();
+    value = raw_drive_right_total;
+    interrupt_global_enable();
+    return value;
+}
+
+uint16 motion_runtime_raw_drive_left_peak(void)
+{
+    uint16 value;
+
+    interrupt_global_disable();
+    value = raw_drive_left_peak;
+    interrupt_global_enable();
+    return value;
+}
+
+uint16 motion_runtime_raw_drive_right_peak(void)
+{
+    uint16 value;
+
+    interrupt_global_disable();
+    value = raw_drive_right_peak;
+    interrupt_global_enable();
+    return value;
+}
+
+uint32 motion_runtime_raw_drive_difference(void)
+{
+    uint32 left_total = motion_runtime_raw_drive_left_total();
+    uint32 right_total = motion_runtime_raw_drive_right_total();
+
+    return left_total > right_total
+        ? left_total - right_total
+        : right_total - left_total;
+}
+
+uint16 motion_runtime_raw_drive_balance_x1000(void)
+{
+    uint32 left_total = motion_runtime_raw_drive_left_total();
+    uint32 right_total = motion_runtime_raw_drive_right_total();
+    uint32 smaller = left_total < right_total ? left_total : right_total;
+    uint32 larger = left_total > right_total ? left_total : right_total;
+
+    if (larger == 0UL)
+    {
+        return 0U;
+    }
+    return (uint16)(((float)smaller * 1000.0f) / (float)larger);
+}
+
+uint32 motion_runtime_raw_drive_left_average_x10(void)
+{
+    uint16 sample_count = motion_runtime_raw_drive_sample_count();
+    uint32 total = motion_runtime_raw_drive_left_total();
+
+    if (sample_count == 0U)
+    {
+        return 0UL;
+    }
+    return (total / sample_count) * 10UL
+        + ((total % sample_count) * 10UL) / sample_count;
+}
+
+uint32 motion_runtime_raw_drive_right_average_x10(void)
+{
+    uint16 sample_count = motion_runtime_raw_drive_sample_count();
+    uint32 total = motion_runtime_raw_drive_right_total();
+
+    if (sample_count == 0U)
+    {
+        return 0UL;
+    }
+    return (total / sample_count) * 10UL
+        + ((total % sample_count) * 10UL) / sample_count;
+}
+
+static void motion_motor_test_apply_direct(uint16 pwm)
+{
+    uint8 test_left = (uint8)(g_motor_test_side != MOTOR_TEST_SIDE_RIGHT);
+    uint8 test_right = (uint8)(g_motor_test_side != MOTOR_TEST_SIDE_LEFT);
+
+    LEFT_MOTOR_DIR = LEFT_MOTOR_FORWARD_LEVEL;
+    RIGHT_MOTOR_DIR = RIGHT_MOTOR_FORWARD_LEVEL;
+    pwm_set_duty(LEFT_MOTOR_PWM, test_left ? (uint32)pwm : 0UL);
+    pwm_set_duty(RIGHT_MOTOR_PWM, test_right ? (uint32)pwm : 0UL);
+    left_output_state.applied_abs_pwm = test_left ? (float)pwm : 0.0f;
+    left_output_state.applied_sign = test_left ? 1 : 0;
+    left_output_state.pending_sign = 0;
+    left_output_state.deadtime_ticks = 0U;
+    right_output_state.applied_abs_pwm = test_right ? (float)pwm : 0.0f;
+    right_output_state.applied_sign = test_right ? 1 : 0;
+    right_output_state.pending_sign = 0;
+    right_output_state.deadtime_ticks = 0U;
+    g_motor_left_applied_pwm = test_left ? (float)pwm : 0.0f;
+    g_motor_right_applied_pwm = test_right ? (float)pwm : 0.0f;
 }
 
 uint8 motion_runtime_motor_test_start(MotorTestSide side)
@@ -888,6 +1215,7 @@ uint8 motion_runtime_motor_test_start(MotorTestSide side)
             && side != MOTOR_TEST_SIDE_RIGHT
             && side != MOTOR_TEST_SIDE_BOTH)
         || stall_diag_active
+        || raw_drive_active
         || g_motion_run_unlocked
         || g_imu_runtime_state != IMU_RUNTIME_READY
         || g_motion_protect_reason != MOTION_PROTECT_NONE)
@@ -917,6 +1245,18 @@ uint8 motion_runtime_motor_test_start(MotorTestSide side)
     motor_test_right_peak = 0U;
     motor_test_left_idle_peak = 0U;
     motor_test_right_idle_peak = 0U;
+    motor_test_boost_active = 0U;
+    motor_test_boost_ticks_remaining = 0U;
+    motor_test_boost_sample_count = 0U;
+    motor_test_boost_left_total = 0UL;
+    motor_test_boost_right_total = 0UL;
+    motor_test_boost_left_peak = 0U;
+    motor_test_boost_right_peak = 0U;
+    motor_test_hold_sample_count = 0U;
+    motor_test_hold_left_total = 0UL;
+    motor_test_hold_right_total = 0UL;
+    motor_test_hold_left_peak = 0U;
+    motor_test_hold_right_peak = 0U;
     if (side == MOTOR_TEST_SIDE_BOTH)
     {
         motor_test_both_passed = 0U;
@@ -952,7 +1292,7 @@ uint8 motion_runtime_motor_test_stop(void)
 
 void motion_runtime_motor_test_tick(void)
 {
-    uint16 elapsed_ticks;
+    uint16 boost_elapsed_ticks;
     uint16 left_raw;
     uint16 right_raw;
     uint16 tested_raw;
@@ -1051,6 +1391,9 @@ void motion_runtime_motor_test_tick(void)
             g_encoder_left_signed = 0;
             g_encoder_right_signed = 0;
             motor_test_noise_ticks = 0U;
+            motor_test_boost_active = 1U;
+            motor_test_boost_ticks_remaining = MOTOR_TEST_BOOST_DURATION_TICKS;
+            motion_motor_test_apply_direct(MOTOR_TEST_BOOST_PWM_VALUE);
         }
         return;
     }
@@ -1060,24 +1403,85 @@ void motion_runtime_motor_test_tick(void)
 
     if (g_motor_test_side == MOTOR_TEST_SIDE_BOTH)
     {
-        motion_apply_left_output(MOTOR_TEST_BOTH_PWM);
-        motion_apply_right_output(MOTOR_TEST_BOTH_PWM);
         tested_raw = 0U;
         untested_raw = 0U;
     }
     else if (g_motor_test_side == MOTOR_TEST_SIDE_LEFT)
     {
-        motion_apply_left_output(MOTOR_TEST_PWM);
-        motion_apply_right_output(0.0f);
         tested_raw = left_raw;
         untested_raw = right_raw;
     }
     else
     {
-        motion_apply_left_output(0.0f);
-        motion_apply_right_output(MOTOR_TEST_PWM);
         tested_raw = right_raw;
         untested_raw = left_raw;
+    }
+
+    if (motor_test_boost_active)
+    {
+        motion_motor_test_apply_direct(MOTOR_TEST_BOOST_PWM_VALUE);
+        if (motor_test_boost_sample_count < 65535U)
+        {
+            motor_test_boost_sample_count++;
+        }
+        if (motor_test_boost_left_total <= (0xFFFFFFFFUL - (uint32)left_raw))
+        {
+            motor_test_boost_left_total += (uint32)left_raw;
+        }
+        else
+        {
+            motor_test_boost_left_total = 0xFFFFFFFFUL;
+        }
+        if (motor_test_boost_right_total <= (0xFFFFFFFFUL - (uint32)right_raw))
+        {
+            motor_test_boost_right_total += (uint32)right_raw;
+        }
+        else
+        {
+            motor_test_boost_right_total = 0xFFFFFFFFUL;
+        }
+        if (left_raw > motor_test_boost_left_peak)
+        {
+            motor_test_boost_left_peak = left_raw;
+        }
+        if (right_raw > motor_test_boost_right_peak)
+        {
+            motor_test_boost_right_peak = right_raw;
+        }
+    }
+    else
+    {
+        motion_motor_test_apply_direct(
+            g_motor_test_side == MOTOR_TEST_SIDE_BOTH
+                ? MOTOR_TEST_BOTH_PWM_VALUE : MOTOR_TEST_PWM_VALUE);
+        if (motor_test_hold_sample_count < 65535U)
+        {
+            motor_test_hold_sample_count++;
+        }
+        if (motor_test_hold_left_total <= (0xFFFFFFFFUL - (uint32)left_raw))
+        {
+            motor_test_hold_left_total += (uint32)left_raw;
+        }
+        else
+        {
+            motor_test_hold_left_total = 0xFFFFFFFFUL;
+        }
+        if (motor_test_hold_right_total <= (0xFFFFFFFFUL - (uint32)right_raw))
+        {
+            motor_test_hold_right_total += (uint32)right_raw;
+        }
+        else
+        {
+            motor_test_hold_right_total = 0xFFFFFFFFUL;
+        }
+        if (left_raw > motor_test_hold_left_peak)
+        {
+            motor_test_hold_left_peak = left_raw;
+        }
+        if (right_raw > motor_test_hold_right_peak)
+        {
+            motor_test_hold_right_peak = right_raw;
+        }
     }
 
     if (motor_test_left_total <= (0xFFFFFFFFUL - (uint32)left_raw))
@@ -1130,8 +1534,10 @@ void motion_runtime_motor_test_tick(void)
         return;
     }
 
-    elapsed_ticks = MOTOR_TEST_DURATION_TICKS - g_motor_test_ticks_remaining;
-    if (elapsed_ticks >= MOTOR_TEST_STARTUP_GRACE_TICKS)
+    boost_elapsed_ticks = MOTOR_TEST_BOOST_DURATION_TICKS
+        - motor_test_boost_ticks_remaining;
+    if (!motor_test_boost_active
+        || boost_elapsed_ticks >= MOTOR_TEST_BOOST_STALL_GRACE_TICKS)
     {
         if (test_left && left_raw <= MOTOR_STALL_RAW_MAX)
         {
@@ -1215,6 +1621,24 @@ void motion_runtime_motor_test_tick(void)
                 1U);
             return;
         }
+    }
+
+    if (motor_test_boost_active)
+    {
+        if (motor_test_boost_ticks_remaining > 0U)
+        {
+            motor_test_boost_ticks_remaining--;
+        }
+        if (motor_test_boost_ticks_remaining == 0U)
+        {
+            motor_test_boost_active = 0U;
+            motor_test_left_stall_ticks = 0U;
+            motor_test_right_stall_ticks = 0U;
+            motion_motor_test_apply_direct(
+                g_motor_test_side == MOTOR_TEST_SIDE_BOTH
+                    ? MOTOR_TEST_BOTH_PWM_VALUE : MOTOR_TEST_PWM_VALUE);
+        }
+        return;
     }
 
     if (g_motor_test_ticks_remaining > 0U)
@@ -1358,6 +1782,106 @@ uint16 motion_runtime_motor_test_right_idle_peak(void)
 
     interrupt_global_disable();
     value = motor_test_right_idle_peak;
+    interrupt_global_enable();
+    return value;
+}
+
+uint16 motion_runtime_motor_test_boost_sample_count(void)
+{
+    uint16 value;
+
+    interrupt_global_disable();
+    value = motor_test_boost_sample_count;
+    interrupt_global_enable();
+    return value;
+}
+
+uint32 motion_runtime_motor_test_boost_left_total(void)
+{
+    uint32 value;
+
+    interrupt_global_disable();
+    value = motor_test_boost_left_total;
+    interrupt_global_enable();
+    return value;
+}
+
+uint32 motion_runtime_motor_test_boost_right_total(void)
+{
+    uint32 value;
+
+    interrupt_global_disable();
+    value = motor_test_boost_right_total;
+    interrupt_global_enable();
+    return value;
+}
+
+uint16 motion_runtime_motor_test_boost_left_peak(void)
+{
+    uint16 value;
+
+    interrupt_global_disable();
+    value = motor_test_boost_left_peak;
+    interrupt_global_enable();
+    return value;
+}
+
+uint16 motion_runtime_motor_test_boost_right_peak(void)
+{
+    uint16 value;
+
+    interrupt_global_disable();
+    value = motor_test_boost_right_peak;
+    interrupt_global_enable();
+    return value;
+}
+
+uint16 motion_runtime_motor_test_hold_sample_count(void)
+{
+    uint16 value;
+
+    interrupt_global_disable();
+    value = motor_test_hold_sample_count;
+    interrupt_global_enable();
+    return value;
+}
+
+uint32 motion_runtime_motor_test_hold_left_total(void)
+{
+    uint32 value;
+
+    interrupt_global_disable();
+    value = motor_test_hold_left_total;
+    interrupt_global_enable();
+    return value;
+}
+
+uint32 motion_runtime_motor_test_hold_right_total(void)
+{
+    uint32 value;
+
+    interrupt_global_disable();
+    value = motor_test_hold_right_total;
+    interrupt_global_enable();
+    return value;
+}
+
+uint16 motion_runtime_motor_test_hold_left_peak(void)
+{
+    uint16 value;
+
+    interrupt_global_disable();
+    value = motor_test_hold_left_peak;
+    interrupt_global_enable();
+    return value;
+}
+
+uint16 motion_runtime_motor_test_hold_right_peak(void)
+{
+    uint16 value;
+
+    interrupt_global_disable();
+    value = motor_test_hold_right_peak;
     interrupt_global_enable();
     return value;
 }
@@ -1570,6 +2094,7 @@ uint8 motion_runtime_stall_diag_start(MotorTestSide side)
             && side != MOTOR_TEST_SIDE_RIGHT
             && side != MOTOR_TEST_SIDE_BOTH)
         || stall_diag_active
+        || raw_drive_active
         || motor_test_active
         || encoder_test_active
         || track_test_active
@@ -1934,6 +2459,7 @@ uint8 motion_runtime_track_test_start_mode(uint8 mode)
     uint16 target_value;
 
     if (track_test_active
+        || raw_drive_active
         || stall_diag_active
         || motor_test_active
         || encoder_test_active
@@ -2514,7 +3040,8 @@ uint8 motion_runtime_encoder_test_start(MotorTestSide side)
         || g_motion_run_unlocked
         || motor_test_active
         || track_test_active
-        || stall_diag_active)
+        || stall_diag_active
+        || raw_drive_active)
     {
         return 0U;
     }

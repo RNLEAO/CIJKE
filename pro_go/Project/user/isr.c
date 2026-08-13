@@ -1332,6 +1332,11 @@ void TM1_Isr() interrupt 3
 			
 			acquire_sensor_data();
 			negative_pressure_tick();
+			if (motion_runtime_raw_drive_is_active())
+			{
+				motion_runtime_raw_drive_tick();
+				return;
+			}
 			if (motion_runtime_stall_diag_is_active())
 			{
 				motion_runtime_stall_diag_tick();

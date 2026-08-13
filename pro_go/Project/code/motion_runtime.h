@@ -9,6 +9,14 @@
 #define MOTOR_TEST_BOTH_PWM_VALUE 2000U
 #define MOTOR_TEST_DURATION_MS  1000U
 #define MOTOR_TEST_PRECHECK_MS  50U
+#define MOTOR_TEST_BOOST_PWM_VALUE 4000U
+#define MOTOR_TEST_BOOST_DURATION_MS 150U
+#define RAW_DRIVE_PWM_VALUE     4000U
+#define RAW_DRIVE_DURATION_MS  10000U
+#define RAW_DRIVE_EVENT_NONE       0U
+#define RAW_DRIVE_EVENT_DONE       1U
+#define RAW_DRIVE_EVENT_ABORTED    2U
+#define RAW_DRIVE_EVENT_STOPPED    3U
 #define STALL_DIAG_PRECHECK_MS  50U
 #define STALL_DIAG_STAGE_MS     100U
 #define STALL_DIAG_PWM_LOW_VALUE  600U
@@ -220,6 +228,21 @@ void motion_runtime_apply_outputs(
     uint8 motor_running);
 void motion_runtime_force_stop(void);
 
+uint8 motion_runtime_raw_drive_start(void);
+uint8 motion_runtime_raw_drive_stop(void);
+void motion_runtime_raw_drive_tick(void);
+uint8 motion_runtime_raw_drive_is_active(void);
+uint8 motion_runtime_raw_drive_take_event(void);
+uint16 motion_runtime_raw_drive_sample_count(void);
+uint32 motion_runtime_raw_drive_left_total(void);
+uint32 motion_runtime_raw_drive_right_total(void);
+uint16 motion_runtime_raw_drive_left_peak(void);
+uint16 motion_runtime_raw_drive_right_peak(void);
+uint32 motion_runtime_raw_drive_difference(void);
+uint16 motion_runtime_raw_drive_balance_x1000(void);
+uint32 motion_runtime_raw_drive_left_average_x10(void);
+uint32 motion_runtime_raw_drive_right_average_x10(void);
+
 uint8 motion_runtime_motor_test_start(MotorTestSide side);
 uint8 motion_runtime_motor_test_stop(void);
 void motion_runtime_motor_test_tick(void);
@@ -236,6 +259,16 @@ uint16 motion_runtime_motor_test_left_peak(void);
 uint16 motion_runtime_motor_test_right_peak(void);
 uint16 motion_runtime_motor_test_left_idle_peak(void);
 uint16 motion_runtime_motor_test_right_idle_peak(void);
+uint16 motion_runtime_motor_test_boost_sample_count(void);
+uint32 motion_runtime_motor_test_boost_left_total(void);
+uint32 motion_runtime_motor_test_boost_right_total(void);
+uint16 motion_runtime_motor_test_boost_left_peak(void);
+uint16 motion_runtime_motor_test_boost_right_peak(void);
+uint16 motion_runtime_motor_test_hold_sample_count(void);
+uint32 motion_runtime_motor_test_hold_left_total(void);
+uint32 motion_runtime_motor_test_hold_right_total(void);
+uint16 motion_runtime_motor_test_hold_left_peak(void);
+uint16 motion_runtime_motor_test_hold_right_peak(void);
 uint8 motion_runtime_encoder_mode_mask(void);
 MotorTestResult motion_runtime_motor_test_take_event(void);
 const char *motion_runtime_motor_test_side_text(void);
@@ -302,6 +335,8 @@ void motion_runtime_set_run_unlocked(uint8 unlocked);
 uint8 motion_runtime_can_run(void);
 void motion_runtime_trigger_protection(MotionProtectReason reason);
 uint8 motion_runtime_clear_protection(void);
+uint8 motion_runtime_motor_protection_is_clearable(void);
+uint8 motion_runtime_clear_motor_protection(void);
 
 const char *motion_runtime_imu_state_text(void);
 const char *motion_runtime_protect_reason_text(void);
